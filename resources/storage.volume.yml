@@ -1,0 +1,9 @@
+# Raw landing volume inside the bundle-owned schema (evidence volume: evidence.volume.yml).
+resources:
+  volumes:
+    raw:
+      catalog_name: ${var.catalog}
+      schema_name: ${var.schema}
+      name: ${var.raw_volume}
+      volume_type: MANAGED
+      comment: Landing zone. public/<source_id>/<snapshot>/ and synthetic/<dataset>/

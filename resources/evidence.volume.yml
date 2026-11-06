@@ -1,0 +1,9 @@
+# Evidence volume inside the bundle-owned schema (chain-of-custody source).
+resources:
+  volumes:
+    evidence:
+      catalog_name: ${var.catalog}
+      schema_name: ${var.schema}
+      name: ${var.evidence_volume}
+      volume_type: MANAGED
+      comment: Evidence documents (originals are never modified; SHA-256 taken at ingest)

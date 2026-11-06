@@ -1,0 +1,76 @@
+# End-to-end orchestration for ASIC Intelligent Case Management.
+# Stages: public ingest -> synthetic gap layer -> evidence docs -> SDP medallion
+#         -> collapse model -> risk + PPS scoring -> evidence Vector Search index
+resources:
+  jobs:
+    case_management_job:
+      name: asic-case-management-${bundle.target}
+      max_concurrent_runs: 1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: raw_volume
+          default: ${var.raw_volume}
+        - name: evidence_volume
+          default: ${var.evidence_volume}
+        - name: llm_endpoint
+          default: ${var.llm_endpoint}
+        - name: embedding_endpoint
+          default: ${var.embedding_endpoint}
+        - name: vector_search_endpoint
+          default: ${var.vector_search_endpoint}
+        - name: curated_slice_size
+          default: ${var.curated_slice_size}
+        - name: num_cases
+          default: ${var.num_cases}
+        - name: num_evidence_docs
+          default: ${var.num_evidence_docs}
+        - name: legal_corpus_max_docs
+          default: ${var.legal_corpus_max_docs}
+        - name: include_abn_bulk_extract
+          default: ${var.include_abn_bulk_extract}
+        - name: random_seed
+          default: ${var.random_seed}
+      tasks:
+        - task_key: ingest_public
+          notebook_task:
+            notebook_path: ../src/notebooks/01_ingest_public_data.ipynb
+
+        - task_key: generate_synthetic
+          depends_on:
+            - task_key: ingest_public
+          notebook_task:
+            notebook_path: ../src/notebooks/02_generate_synthetic_data.ipynb
+
+        - task_key: generate_evidence_documents
+          depends_on:
+            - task_key: generate_synthetic
+          notebook_task:
+            notebook_path: ../src/notebooks/03_generate_evidence_documents.ipynb
+
+        - task_key: medallion
+          depends_on:
+            - task_key: generate_evidence_documents
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.case_management.id}
+            full_refresh: false
+
+        - task_key: train_collapse_model
+          depends_on:
+            - task_key: medallion
+          notebook_task:
+            notebook_path: ../src/notebooks/04_train_collapse_model.ipynb
+
+        - task_key: score_risk_and_pps
+          depends_on:
+            - task_key: train_collapse_model
+          notebook_task:
+            notebook_path: ../src/notebooks/05_score_risk_and_pps.ipynb
+
+        - task_key: build_evidence_vector_index
+          depends_on:
+            - task_key: medallion
+          notebook_task:
+            notebook_path: ../src/notebooks/06_build_evidence_vector_index.ipynb

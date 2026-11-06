@@ -1,0 +1,23 @@
+# Lakeflow Spark Declarative Pipeline: bronze -> silver -> gold for ASIC case management.
+# Table contract: src/pipelines/case_management/CONTRACT.md
+resources:
+  pipelines:
+    case_management:
+      name: asic-case-management-medallion-${bundle.target}
+      catalog: ${var.catalog}
+      schema: ${var.schema}
+      root_path: ../src/pipelines/case_management
+      libraries:
+        - glob:
+            include: ../src/pipelines/case_management/transformations/**
+      serverless: true
+      photon: true
+      channel: current
+      continuous: false
+      configuration:
+        catalog: ${var.catalog}
+        schema: ${var.schema}
+        raw_volume_path: /Volumes/${var.catalog}/${var.schema}/${var.raw_volume}
+        evidence_volume_path: /Volumes/${var.catalog}/${var.schema}/${var.evidence_volume}
+        llm_endpoint: ${var.llm_endpoint}
+        curated_slice_size: ${var.curated_slice_size}

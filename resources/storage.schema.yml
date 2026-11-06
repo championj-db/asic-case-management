@@ -1,0 +1,8 @@
+# The schema ${var.catalog}.${var.schema} is created outside the bundle (it already exists in dev), so it is not a
+# bundle resource. To have the bundle own it in a new environment, add back:
+# resources:
+#   schemas:
+#     asic_case_management:
+#       catalog_name: ${var.catalog}
+#       name: ${var.schema}
+#       comment: ASIC Intelligent Case Management - public, synthetic and derived data (provenance-flagged)

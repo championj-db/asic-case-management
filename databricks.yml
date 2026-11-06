@@ -1,0 +1,61 @@
+# ASIC Intelligent Case Management - Declarative Automation Bundle
+# Multi-stage pipeline: public ingest -> synthetic gap layer -> evidence docs ->
+# SDP medallion (bronze/silver/gold) -> collapse model -> PPS scoring -> Vector Search.
+# All environment-specific values are bundle variables; nothing is hard-coded in code.
+
+bundle:
+  name: asic-case-management
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog for all assets
+    default: au_pubsec_catalog
+  schema:
+    description: Schema created and owned by this bundle (must be new)
+    default: asic_case_management
+  raw_volume:
+    description: Managed volume for landed public and synthetic raw files
+    default: raw
+  evidence_volume:
+    description: Managed volume for evidence documents (chain of custody source)
+    default: evidence
+  llm_endpoint:
+    description: Foundation Model endpoint for extraction, summaries and briefs
+    default: databricks-claude-sonnet-4-6
+  embedding_endpoint:
+    description: Embedding endpoint for the evidence Vector Search index
+    default: databricks-gte-large-en
+  vector_search_endpoint:
+    description: Vector Search endpoint (created by the job if missing)
+    default: asic-case-management-vs
+  curated_slice_size:
+    description: Number of real companies in the curated focus slice
+    default: "5000"
+  num_cases:
+    description: Number of synthetic open cases
+    default: "40"
+  num_evidence_docs:
+    description: Number of synthetic evidence documents
+    default: "500"
+  legal_corpus_max_docs:
+    description: Max ASIC v ... judgments kept from the Open Australian Legal Corpus
+    default: "2000"
+  include_abn_bulk_extract:
+    description: Download the ABN Bulk Extract (~1 GB of zipped XML)
+    default: "true"
+  random_seed:
+    description: Seed for reproducible synthetic data
+    default: "42"
+
+targets:
+  dev:
+    default: true
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
