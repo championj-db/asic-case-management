@@ -42,5 +42,9 @@ def gold_entity_profile():
     out = ent.join(sources, "entity_id", "left")
     for part in (co, lic, abr, ato, apra, austrac, afca, org_ban, dir_matches, cases, collapse, ato_tt, sanctions):
         out = out.join(part, "acn", "left")
+    out = (out.withColumn("asic_provenance", F.lit("public")).withColumn("abr_provenance", F.lit("public"))
+              .withColumn("ato_provenance", F.lit("synthetic")).withColumn("ato_tt_provenance", F.lit("public"))
+              .withColumn("apra_provenance", F.lit("synthetic")).withColumn("austrac_provenance", F.lit("synthetic"))
+              .withColumn("afca_provenance", F.lit("synthetic")).withColumn("sanctions_provenance", F.lit("public")))
     return out.fillna(0, subset=["apra_flag_count", "austrac_restricted_record_count", "directors_possible_banned_match",
                                  "open_cases", "source_record_count"])

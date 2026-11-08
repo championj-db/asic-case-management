@@ -51,8 +51,9 @@ def gold_entity_features():
                          [F.count("*").alias("enforcement_alternatives_count")])
     afca = (keys.join(t("silver_afca_complaints").select("acn", "year", "complaints"), "acn")
             .groupBy("acn", "as_of_date")
-            .agg(F.sum(F.when(F.col("year") == F.year("as_of_date"), F.col("complaints"))).alias("afca_now"),
-                 F.sum(F.when(F.col("year") == F.year("as_of_date") - 1, F.col("complaints"))).alias("afca_prev"))
+            # Point in time: a calendar year's AFCA total is only known once the year has closed
+            .agg(F.sum(F.when(F.col("year") == F.year("as_of_date") - 1, F.col("complaints"))).alias("afca_now"),
+                 F.sum(F.when(F.col("year") == F.year("as_of_date") - 2, F.col("complaints"))).alias("afca_prev"))
             .select("acn", "as_of_date", F.coalesce("afca_now", F.lit(0)).alias("afca_complaints_latest"),
                     pct(F.coalesce("afca_now", F.lit(0)), F.col("afca_prev")).alias("afca_complaints_trend_pct")))
 
@@ -62,7 +63,7 @@ def gold_entity_features():
                  .filter((F.col("appointed_date") <= F.col("as_of_date")) &
                          (F.col("ceased_date").isNull() | (F.col("ceased_date") >= F.col("as_of_date"))))
                  .select("acn", "as_of_date", "person_id"))
-    banned_people = (spark.read.table("person_banned_match_candidates").filter("match_score >= 0.6")
+    banned_people = (spark.read.table("person_banned_match_candidates").filter("match_score >= 0.9")  # reviewed band excluded
                      .select(F.regexp_replace("entity_id", "^PE-", "").alias("person_id"), "start_date").distinct())
     banned = (in_office.join(banned_people, "person_id")
               .filter(F.col("start_date").isNull() | (F.col("start_date") <= F.col("as_of_date")))
@@ -99,4 +100,5 @@ def gold_entity_features():
                .withColumn("label_collapse_12m", label(12))
                .withColumn("label_collapse_24m", label(24))
                .withColumn("provenance", F.lit("derived"))
+               .withColumn("input_provenance", F.lit("public:ASIC registers; synthetic:ATO,AUSTRAC,APRA,AFCA,directorships"))
                .drop("reg_date", "name_related_collapsed"))

@@ -1,0 +1,32 @@
+{
+  "_comment": "Gold/scoring tables served to the app from Lakebase (UC -> Postgres, SNAPSHOT mode, refreshed by job task sync_lakebase). AUSTRAC detail is never synced: synced tables do not carry UC masks, so restricted data is served only via on-behalf-of-user warehouse queries.",
+  "lakebase_catalog": "asic_case_mgmt_pg",
+  "postgres_schema": "gold",
+  "tables": [
+    {"source": "gold_case_inputs", "pk": ["case_id"]},
+    {"source": "gold_case_party", "pk": ["case_id", "entity_id"]},
+    {"source": "gold_case_budget", "pk": ["case_id", "category"]},
+    {"source": "gold_case_spend", "pk": ["case_id", "category", "month"]},
+    {"source": "gold_case_event", "pk": ["event_id"]},
+    {"source": "gold_entity_profile", "pk": ["entity_id"]},
+    {"source": "gold_entity_network", "pk": ["from_entity", "to_entity", "rel_type"]},
+    {"source": "gold_evidence_item", "pk": ["evidence_id"]},
+    {"source": "gold_custody_event", "pk": ["custody_event_id"]},
+    {"source": "silver_evidence_extraction", "pk": ["extraction_id"]},
+    {"source": "silver_entity", "pk": ["entity_id"]},
+    {"source": "silver_source_record", "pk": ["source_record_id"]},
+    {"source": "silver_breach_report", "pk": ["intake_id"]},
+    {"source": "silver_resolution_review", "pk": ["review_id"]},
+    {"source": "silver_historical_matters", "pk": ["matter_id"]},
+    {"source": "silver_user", "pk": ["user_id"]},
+    {"source": "silver_team", "pk": ["team_id"]},
+    {"source": "risk_score", "pk": ["entity_id"]},
+    {"source": "risk_score_history", "pk": ["entity_id", "as_of_date"]},
+    {"source": "pps_score", "pk": ["case_id"]},
+    {"source": "pps_score_history", "pk": ["case_id", "as_of_date"]},
+    {"source": "pps_params", "pk": ["params_version"]},
+    {"source": "scoring_weights", "pk": ["weights_version"]},
+    {"source": "intervention_presets", "pk": ["preset_id"]},
+    {"source": "scenario", "pk": ["scenario_id"]}
+  ]
+}

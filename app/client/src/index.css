@@ -1,0 +1,4 @@
+/* The app uses the Genie Design system verbatim (design.css) plus additions built from its tokens (app.css).
+   AppKit UI's Tailwind theme is intentionally not imported so it cannot restyle the design. */
+@import './styles/design.css';
+@import './styles/app.css';

@@ -9,12 +9,17 @@ bundle:
 include:
   - resources/*.yml
 
+# The Databricks App is its own bundle in app/ (AppKit tooling expects app/databricks.yml); keep it out of this one.
+sync:
+  exclude:
+    - app/**
+
 variables:
   catalog:
     description: Unity Catalog catalog for all assets
     default: au_pubsec_catalog
   schema:
-    description: Schema created and owned by this bundle (must be new)
+    description: Schema for all assets (created outside the bundle; see resources/storage.schema.yml)
     default: asic_case_management
   raw_volume:
     description: Managed volume for landed public and synthetic raw files
@@ -49,6 +54,9 @@ variables:
   random_seed:
     description: Seed for reproducible synthetic data
     default: "42"
+  austrac_group:
+    description: Account group allowed to see AUSTRAC-restricted detail
+    default: austrac_authorised
 
 targets:
   dev:

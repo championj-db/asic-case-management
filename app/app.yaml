@@ -1,0 +1,16 @@
+command: ['npm', 'run', 'start']
+env:
+  - name: DATABRICKS_VS_INDEX_NAME
+    valueFrom: vector-search-index
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+  - name: DATABRICKS_VOLUME_FILES
+    valueFrom: files
+  - name: LAKEBASE_ENDPOINT
+    valueFrom: postgres
+  - name: DATABRICKS_SERVING_ENDPOINT_NAME
+    valueFrom: serving-endpoint
+  - name: UC_CATALOG
+    value: au_pubsec_catalog
+  - name: UC_SCHEMA
+    value: asic_case_management

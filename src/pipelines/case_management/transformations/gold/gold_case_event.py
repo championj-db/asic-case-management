@@ -28,5 +28,7 @@ def gold_case_event():
               .unionByName(_ev(by_acn("silver_enforcement_alternative"), "outcome_date", "outcome_type", "provision", "confirmed", "silver_enforcement_alternative"))
               .unionByName(_ev(ai, "event_date", "'Evidence event'", "value", "suggested", "silver_evidence_extraction", "array(evidence_id)")))
     return (events.withColumn("ai_flag", F.col("source") == "silver_evidence_extraction")
+                  .withColumn("provenance", F.when(F.col("source") == "silver_company_status_history", "public")
+                                             .when(F.col("source") == "silver_evidence_extraction", "derived").otherwise("synthetic"))
                   .withColumn("event_id", F.substring(F.sha2(F.concat_ws("|", "case_id", "event_date", "event_type", "description", "source"), 256), 1, 16))
                   .dropDuplicates(["event_id"]))

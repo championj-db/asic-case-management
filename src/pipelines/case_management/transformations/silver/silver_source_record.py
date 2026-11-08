@@ -29,12 +29,14 @@ def silver_source_record():
         _rec(t("silver_afca_complaints").select("acn").distinct(), co, "AFCA", "silver_afca_complaints", "acn"),
         _rec(t("silver_breach_report"), co, "ASIC", "silver_breach_report", "intake_id"),
         _rec(t("silver_directorship"), "concat('PE-', person_id)", "ASIC", "silver_directorship", "directorship_id"),
-        _rec(t("person_banned_match_candidates").filter("match_score >= 0.9"), "entity_id", "ASIC", "silver_banned_party",
-             "banned_party_id", score_col="match_score"),
+        # Person <-> banned-register candidates are NOT auto-attached: synthetic people must never inherit real
+        # named individuals' records. They surface only as possible matches in Resolution Review (SPEC 8.5).
     ]
     out = parts[0]
     for p in parts[1:]:
         out = out.unionByName(p)
     return (out.withColumn("source_record_id", F.substring(F.sha2(F.concat_ws("|", "entity_id", "source_table", "source_key"), 256), 1, 20))
                .withColumn("loaded_at", F.current_timestamp())
+               .withColumn("provenance", F.when(F.col("agency").isin("ASIC", "ABR") & ~F.col("source_table").isin("silver_breach_report", "silver_directorship"), "public")
+                                          .otherwise("synthetic"))
                .dropDuplicates(["source_record_id"]))

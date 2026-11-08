@@ -28,4 +28,7 @@ def gold_entity_network():
             .unionByName(shares_director.withColumn("weight", F.col("weight").cast("double")))
             .unionByName(co_director.withColumn("weight", F.col("weight").cast("double")))
             .unionByName(names.withColumn("weight", F.col("weight").cast("double")))
-            .unionByName(possible.withColumn("weight", F.col("weight").cast("double"))))
+            .unionByName(possible.withColumn("weight", F.col("weight").cast("double")))
+            # Officer appointments are synthetic over real companies; business names are real (P2); possible matches are derived
+            .withColumn("provenance", F.when(F.col("rel_type") == "shares_business_name", "public")
+                                       .when(F.col("rel_type") == "possible_match", "derived").otherwise("synthetic")))
