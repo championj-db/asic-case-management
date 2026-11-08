@@ -1,6 +1,7 @@
 import { analytics, createApp, files, lakebase, server } from '@databricks/appkit';
 import { aiSearch } from '@databricks/appkit/beta';
 import { SCHEMA_SQL } from './db/schema';
+import { seedTasks } from './db/seed';
 import type { Kit } from './lib/types';
 import { registerBriefRoutes } from './routes/brief';
 import { registerCaseRoutes } from './routes/cases';
@@ -52,6 +53,8 @@ await createApp({
       );
       if (Number(rows[0]?.n ?? 0) < expected.length) await kit.lakebase.query(SCHEMA_SQL);
       console.log(`[startup] case_app schema ready (${expected.length} tables)`);
+      const seeded = await seedTasks(kit);
+      if (seeded) console.log(`[startup] seeded ${seeded} stage-based tasks`);
     } catch (err) {
       console.error('[startup] case_app schema setup failed:', (err as Error).message);
     }

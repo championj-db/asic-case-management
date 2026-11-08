@@ -77,7 +77,7 @@ export function Shell({ children }: { children: ReactNode }) {
               {me?.austrac_authorised ? ' · AUSTRAC authorised' : ''}
             </small>
           </div>
-          <button className="avatar" aria-label="Open user menu" aria-expanded={menu} data-od-id="user-menu" onClick={() => setMenu((m) => !m)}>
+          <button className="avatar" aria-label={me ? `${initials(me.displayName)}: open user menu for ${me.displayName}` : "Open user menu"} aria-expanded={menu} data-od-id="user-menu" onClick={() => setMenu((m) => !m)}>
             {me ? initials(me.displayName) : ''}
           </button>
         </div>

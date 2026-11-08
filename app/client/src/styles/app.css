@@ -149,3 +149,22 @@ mark.focus { outline: 2px solid var(--accent); }
 .n-label { paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
 .risk-chip { white-space: nowrap; }
 .risk-chip { align-self: center; flex-shrink: 0; height: auto; }
+.brief-body ul, .brief-body ol { margin: 0 0 var(--space-3); padding-left: 1.25rem; }
+.brief-body li { margin-bottom: var(--space-1); }
+.brief-body h4 { margin: var(--space-3) 0 var(--space-2); font-size: var(--text-sm); }
+/* 1120px: the prototype collapses to an icon rail, but nav items here are text links. Keep a compact labelled sidebar. */
+@media (max-width: 1120px) and (min-width: 761px) {
+  .shell { grid-template-columns: 172px minmax(0, 1fr); }
+  .nav a .count { display: none; }
+  .nav-label { display: block; }
+}
+/* WCAG AA: white text on the brand red is 3.4:1. Darken the primary action background (still on-palette) to pass 4.5:1. */
+:root { --accent-strong: color-mix(in oklab, var(--accent), black 22%); }
+.btn.primary { background: var(--accent-strong); border-color: var(--accent-strong); }
+.btn.primary:hover { background: color-mix(in oklab, var(--accent-strong), black 8%); border-color: color-mix(in oklab, var(--accent-strong), black 8%); }
+.btn.primary:disabled { background: color-mix(in oklab, var(--accent-strong), white 45%); border-color: transparent; }
+/* Matrix: bubbles centred on low-risk cases overhang the x-axis; keep the axis title clear of them */
+.matrix { margin-bottom: 64px; }
+.matrix::after { bottom: -52px; }
+.badge.good { border-color: var(--success); color: var(--success); }
+.badge.warn { border-color: var(--warn); }

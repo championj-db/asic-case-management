@@ -9,8 +9,10 @@ interface MyWork {
   tasks: Row[];
   kpis: Record<string, number>;
   activity: Row[];
+  approvals?: Row[];
 }
 
+const CRITERION_LABEL: Record<string, string> = { financial: 'Financial return', success: 'Likelihood of success', harm: 'Consumer harm', deterrence: 'Deterrence', urgency: 'Urgency' };
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export function MyWorkView() {
@@ -34,7 +36,7 @@ export function MyWorkView() {
       </header>
       <div className="kpis">
         <div className="kpi"><span>My open cases</span><strong>{k.open_cases}</strong><small>{k.decision_stage} at decision stage</small></div>
-        <div className="kpi"><span>Open tasks</span><strong>{k.tasks_due}</strong><small className={k.overdue ? 'trend-up' : ''}>{k.overdue} overdue</small></div>
+        <div className="kpi"><span>My open tasks</span><strong>{k.tasks_due}</strong><small className={k.overdue ? 'trend-up' : ''}>{k.overdue} overdue · team {k.team_tasks} ({k.team_overdue} overdue)</small></div>
         <div className="kpi"><span>Evidence not yet reviewed</span><strong>{k.evidence_unreviewed}</strong><small>{k.evidence_hot} tagged Hot</small></div>
         <div className="kpi"><span>✦ AI extractions to confirm</span><strong>{k.extractions_pending}</strong><small>Across {k.extraction_docs} documents</small></div>
         <div className="kpi"><span>Agency &amp; register updates</span><strong>{k.agency_updates}</strong><small>Latest confirmed signals</small></div>
@@ -63,7 +65,7 @@ export function MyWorkView() {
                       <td><span className="stage-chip">{STAGE_LABEL(c.stage)}</span></td>
                       <td className="num">{c.pps === null || c.pps === undefined ? '—' : Math.round(Number(c.pps))}</td>
                       <td><RiskChip p={c.p_collapse_12m} band={c.risk_band} collapsedOn={c.risk_collapse_date} collapseStatus={c.risk_collapse_status} /></td>
-                      <td>{c.next_due ? `${date(c.next_due)} · ${txt(c.next_task)}` : c.limitation_date ? `Limitation ${date(c.limitation_date)}` : '—'}</td>
+                      <td className={c.next_due && new Date(txt(c.next_due)) < new Date(new Date().toDateString()) ? 'trend-up' : undefined}>{c.next_due ? `${new Date(txt(c.next_due)) < new Date(new Date().toDateString()) ? 'Overdue · ' : ''}${date(c.next_due)} · ${txt(c.next_task)}` : c.limitation_date ? `Limitation ${date(c.limitation_date)}` : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -88,6 +90,25 @@ export function MyWorkView() {
           </div>
         </aside>
       </div>
+      {(data.approvals?.length ?? 0) > 0 && (
+        <section className="card" style={{ marginTop: 20 }}>
+          <div className="card-head"><h3>Decisions awaiting your approval</h3><span className="ai-label">Four-eyes · proposed by another lead or counsel</span></div>
+          <table className="data-table">
+            <thead><tr><th>Case</th><th>Proposed decision</th><th>Proposed by</th><th className="num">PPS</th><th>Since</th></tr></thead>
+            <tbody>
+              {data.approvals?.map((d) => (
+                <tr key={txt(d.decision_id)} className="clickable" onClick={() => nav(`/cases/${txt(d.case_id)}/scoring`)}>
+                  <td>{titleCase(txt(d.case_title).split(' - ')[0])}</td>
+                  <td><strong>{txt(d.decision)}</strong></td>
+                  <td>{txt(d.decided_by_name ?? d.decided_by)}</td>
+                  <td className="num">{Math.round(Number(d.pps_total))}</td>
+                  <td>{shortDate(d.decided_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
       {data.tasks.length > 0 && (
         <section className="card" style={{ marginTop: 20 }}>
           <div className="card-head"><h3>Open tasks</h3></div>
@@ -245,7 +266,7 @@ export function ExecutiveView() {
             <div className="card-body list">
               <div className="list-item"><div><strong>{plural(Number(data.since_last.advanced ?? 0), 'stage advance', 'stage advances')}</strong><small>Recorded in the audit log</small></div><span>→</span></div>
               <div className="list-item"><div><strong>{plural(Number(data.since_last.scenarios ?? 0), 'scenario saved', 'scenarios saved')}</strong><small>What-if analysis by leads</small></div><span>↻</span></div>
-              <div className="list-item"><div><strong>{plural(Number(data.since_last.decisions ?? 0), 'prosecution decision', 'prosecution decisions')}</strong><small>With recorded rationale</small></div><span>✓</span></div>
+              <div className="list-item"><div><strong>{plural(Number(data.since_last.decisions ?? 0), 'approved decision', 'approved decisions')}</strong><small>{Number(data.since_last.decisions_proposed ?? 0)} proposed · four-eyes approval</small></div><span>✓</span></div>
             </div>
           </section>
         </aside>
@@ -266,7 +287,7 @@ const STAGE_COLOR: Record<string, string> = {
   Investigation: 'var(--viz-2)',
   Decision: 'var(--viz-5)',
   Litigation: 'var(--viz-8)',
-  Referral: 'var(--viz-9)',
+  Referral: 'var(--viz-8)', // shown together with Litigation
   Outcome: 'var(--viz-10)',
 };
 
@@ -326,15 +347,15 @@ export function PortfolioView() {
               })}
           </div>
           <div className="network-legend">
-            {Object.entries(STAGE_COLOR).map(([s, col]) => (
-              <span key={s} className="row"><span className="band-mark" style={{ background: col }} />{STAGE_LABEL(s)}</span>
+            {[...new Map(Object.entries(STAGE_COLOR).map(([s, col]) => [STAGE_LABEL(s), col])).entries()].map(([label, col]) => (
+              <span key={label} className="row"><span className="band-mark" style={{ background: col }} />{label}</span>
             ))}
           </div>
         </section>
         <aside className="card">
-          <div className="card-head"><h3>Movers · since last snapshot</h3></div>
+          <div className="card-head"><h3>Movers · last quarter</h3></div>
           <div className="card-body list">
-            {data.movers.length === 0 && <Empty title="No movement yet" />}
+            {data.movers.length === 0 && <Empty title="No material movement">No case moved by 1+ PPS point or 5+ risk points since the previous quarterly snapshot.</Empty>}
             {data.movers.map((m) => {
               const r = Number(m.risk_delta_pts);
               const d = Number(m.pps_delta);
@@ -343,7 +364,7 @@ export function PortfolioView() {
                 <div className="list-item" key={txt(m.case_id)} style={{ cursor: 'pointer' }} onClick={() => nav(`/cases/${txt(m.case_id)}/scoring`)}>
                   <div>
                     <strong>{titleCase(m.respondent_name ?? m.title)}</strong>
-                    <p>{riskLed ? 'Collapse model re-scored on new agency data' : 'Priority score changed'} · since {shortDate(m.since)}</p>
+                    <p>{riskLed ? 'Collapse model · new agency data' : `Led by ${(CRITERION_LABEL[txt(m.driver)] ?? 'score').toLowerCase()} (${signed(Number(m.driver_delta ?? d))} pts)`} · since {date(m.since)}</p>
                   </div>
                   <span className={`mono ${riskLed ? (r > 0 ? 'trend-up' : 'trend-good') : d > 0 ? 'trend-good' : ''}`}>
                     {riskLed ? `Risk ${signed(r)}` : `PPS ${signed(d)}`}

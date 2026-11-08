@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { api, useApi } from '../lib/api';
-import { collapseKind, date, money, num, pct, riskLabel, shortDate, STAGE_LABEL, titleCase, txt } from '../lib/format';
+import { collapseKind, date, dateTime, money, num, pct, riskLabel, shortDate, STAGE_LABEL, titleCase, txt } from '../lib/format';
 import {
   AiLabel, Empty, ErrorState, PageSkeleton, Prov, Restricted, RiskChip, SkeletonBlock, Sparkline, useSession, useSort, useToast, type Row,
 } from '../components/common';
@@ -477,6 +477,18 @@ interface Admin {
 }
 const W_LABELS: [string, string][] = [['w_financial', 'Financial return'], ['w_success', 'Likelihood of success'], ['w_harm', 'Consumer / market harm'], ['w_deterrence', 'Deterrence'], ['w_urgency', 'Urgency']];
 
+const PARAM_LABEL: Record<string, string> = {
+  success_b0: 'P(success) intercept (fitted)', success_b1: 'P(success) slope on evidence strength (fitted)',
+  success_default_strength: 'Default evidence strength', success_fit_n: 'Matters used in the P(success) fit',
+  fin_return_cap: 'Return ratio that scores 100', collapse_clamp: 'Upper limit on P(collapse)',
+  harm_consumers_log_scale: 'Harm: consumers scale (log10)', harm_loss_log_scale: 'Harm: loss scale (log10 $)',
+  harm_w_consumers: 'Harm weight: consumers affected', harm_w_loss: 'Harm weight: consumer loss', harm_w_vulnerable: 'Harm weight: vulnerable cohort',
+  urg_w_collapse: 'Urgency weight: collapse risk', urg_w_smr: 'Urgency weight: recent SMR (restricted)', urg_w_limitation: 'Urgency weight: limitation date',
+  limitation_window_months: 'Limitation window (months)', limitation_ramp_months: 'Limitation urgency ramp (months)',
+  default_p_collapse_12m: 'Default P(collapse 12m) when unscored', default_p_collapse_24m: 'Default P(collapse 24m) when unscored',
+  band_proceed: 'Band threshold: Proceed', band_conditional: 'Band threshold: Proceed – conditional', band_alternatives: 'Band threshold: Consider alternatives',
+};
+
 export function AdminView() {
   const { me } = useSession();
   const toast = useToast();
@@ -541,7 +553,7 @@ export function AdminView() {
               <p className="note">Every constant in the score, including the fitted P(success) coefficients. The live what-if engine and batch scoring both read this version, so results reproduce exactly.</p>
               <table className="data-table"><tbody>
                 {Object.entries((typeof params?.params_json === 'string' ? JSON.parse(params.params_json) : params?.params_json ?? {}) as Record<string, number>).map(([k, v]) => (
-                  <tr key={k}><td className="mono small">{k}</td><td className="num">{txt(v)}</td></tr>
+                  <tr key={k}><td>{PARAM_LABEL[k] ?? k}<small className="mono muted" style={{ display: 'block' }}>{k}</small></td><td className="num">{txt(v)}</td></tr>
                 ))}
               </tbody></table>
             </div>
@@ -561,15 +573,27 @@ export function AdminView() {
             <div className="card-head"><h3>Model registry</h3><span className="note">Unity Catalog</span></div>
             <div className="card-body list">
               {data.models.length === 0 && <p className="note">No registered model versions found.</p>}
-              {data.models.map((m, i) => (
-                <div className="list-item" key={i}>
-                  <div>
-                    <strong>{txt(m.model_name).split('.').pop()} v{txt(m.version ?? '?')}</strong>
-                    <small>{m.error ? txt(m.error) : `${txt(m.status ?? '')} · ${m.created_at ? date(Number(m.created_at)) : ''}`}</small>
+              {data.models.map((m, i) => {
+                const mt = m.metrics as Row | null;
+                return (
+                  <div className="list-item" key={i} style={{ alignItems: 'flex-start' }}>
+                    <div>
+                      <strong>{txt(m.model_name).split('.').pop()} v{txt(m.version ?? '?')}</strong>
+                      <small>{m.error ? txt(m.error) : `${titleCase(txt(m.status ?? ''))} · registered ${m.created_at ? dateTime(new Date(Number(m.created_at))) : '—'}`}</small>
+                      {mt && (
+                        <small>
+                          AUC {Number(mt.test_auc).toFixed(2)} · calibration error {Number(mt.ece_raw).toFixed(3)} → {Number(mt.ece_calibrated).toFixed(3)} · population rate {pct(mt.population_rate)} · evaluated on {num(mt.n_evaluation)} rows from {date(mt.evaluated_from)}
+                        </small>
+                      )}
+                      {m.note ? <small>{txt(m.note)}</small> : null}
+                    </div>
+                    <div className="row" style={{ gap: 6 }}>
+                      {m.serving ? <span className="badge" style={{ borderColor: 'var(--success)' }}>Serving</span> : null}
+                      {((m.aliases as string[]) ?? []).map((a) => <span className="badge" key={a}>{a}</span>)}
+                    </div>
                   </div>
-                  {((m.aliases as string[]) ?? []).map((a) => <span className="badge" key={a}>{a}</span>)}
-                </div>
-              ))}
+                );
+              })}
               <div className="list-item"><div><strong>Evidence extraction &amp; briefs</strong><small>Foundation Model API · via the app’s serving endpoint</small></div><span className="badge">Current</span></div>
             </div>
           </section>

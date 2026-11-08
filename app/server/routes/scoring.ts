@@ -29,6 +29,17 @@ const Decision = z.object({
   scenario_id: z.string().uuid().nullable().optional(),
 });
 
+/** Decisions with their four-eyes approval state (latest approval action, else awaiting approval). */
+export const DECISIONS_SQL = `
+  SELECT d.*, u.display_name AS decided_by_name, coalesce(a.action, 'Awaiting approval') AS approval_status,
+         a.note AS approval_note, a.approver, au.display_name AS approver_name, a.acted_at AS approved_at
+  FROM case_app.decision d
+  LEFT JOIN gold.silver_user u ON u.user_id = d.decided_by
+  LEFT JOIN LATERAL (SELECT * FROM case_app.decision_approval x WHERE x.decision_id = d.decision_id ORDER BY x.acted_at DESC LIMIT 1) a ON true
+  LEFT JOIN gold.silver_user au ON au.user_id = a.approver`;
+
+const Approval = z.object({ action: z.enum(['Approved', 'Returned']), note: z.string().trim().min(5).max(2000) });
+
 export async function loadModelContext(kit: Kit, caseId: string) {
   const [{ rows: pps }, { rows: weights }, { rows: params }, { rows: presets }] = await Promise.all([
     kit.lakebase.query(`SELECT * FROM gold.pps_score WHERE case_id = $1`, [caseId]),
@@ -68,7 +79,7 @@ export function registerScoringRoutes(kit: Kit) {
           [id],
         ),
         kit.lakebase.query(`SELECT as_of_date, total, band, p_collapse_12m FROM gold.pps_score_history WHERE case_id = $1 ORDER BY as_of_date`, [id]),
-        kit.lakebase.query(`SELECT d.*, u.display_name AS decided_by_name FROM case_app.decision d LEFT JOIN gold.silver_user u ON u.user_id = d.decided_by WHERE case_id = $1 ORDER BY decided_at DESC`, [id]),
+        kit.lakebase.query(`${DECISIONS_SQL} WHERE d.case_id = $1 ORDER BY d.decided_at DESC`, [id]),
       ]);
       const inputsRaw = parseJson<Row>(ctx.pps.inputs_json, {});
       const r = risk[0];
@@ -137,10 +148,32 @@ export function registerScoringRoutes(kit: Kit) {
         [id, body.decision, body.rationale, body.scenario_id ?? null, ctx.pps?.total ?? null, ctx.pps?.band ?? null, ctx.paramsVersion, actor.userId],
       );
       await audit(kit, actor, {
-        action: `Recorded decision: ${body.decision}`, objectType: 'decision', objectId: txt(rows[0]?.decision_id), caseId: id,
+        action: `Proposed decision: ${body.decision} (awaiting approval)`, objectType: 'decision', objectId: txt(rows[0]?.decision_id), caseId: id,
         newValue: body.decision, reason: body.rationale, detail: { pps: ctx.pps?.total, band: ctx.pps?.band, scenario_id: body.scenario_id },
       });
       return rows[0];
+    }));
+
+    /** Four-eyes approval: a different Enforcement Lead approves or returns a proposed decision, with a note (audited). */
+    app.post('/api/decisions/:did/approval', route(kit, async (req, _res, actor) => {
+      const did = Number(txt(req.params.did));
+      const body = Approval.parse(req.body);
+      const { rows } = await kit.lakebase.query(`${DECISIONS_SQL} WHERE d.decision_id = $1`, [did]);
+      const d = rows[0];
+      if (!d) throw new HttpError(404, 'Decision not found');
+      await getCase(kit, actor, txt(d.case_id));
+      if (actor.persona !== 'Enforcement Lead') throw new HttpError(403, 'Only an enforcement lead can approve prosecution decisions');
+      if (d.decided_by === actor.userId) throw new HttpError(403, 'A decision must be approved by a different lead than the one who proposed it');
+      if (d.approval_status !== 'Awaiting approval') throw new HttpError(409, `This decision is already ${txt(d.approval_status).toLowerCase()}`);
+      await kit.lakebase.query(
+        `INSERT INTO case_app.decision_approval (decision_id, case_id, action, note, approver) VALUES ($1, $2, $3, $4, $5)`,
+        [did, d.case_id, body.action, body.note, actor.userId],
+      );
+      await audit(kit, actor, {
+        action: `${body.action} decision: ${txt(d.decision)}`, objectType: 'decision', objectId: String(did), caseId: txt(d.case_id),
+        oldValue: 'Awaiting approval', newValue: body.action, reason: body.note,
+      });
+      return { ok: true, approval_status: body.action };
     }));
   });
 }

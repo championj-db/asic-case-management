@@ -95,6 +95,48 @@ function recommendationText(r: PpsResult, w: PpsWeights): string {
 /** Largest PPS swing for a driver; tiny effects read as 0 rather than a signed zero. */
 const swing = (v: number) => (Math.abs(v) < 0.05 ? '0' : `${v > 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}`);
 
+/** One proposed decision with its four-eyes approval state; a different Enforcement Lead can approve or return it. */
+function DecisionRow({ d, onDone }: { d: Row; onDone: () => void }) {
+  const { me } = useSession();
+  const toast = useToast();
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const status = txt(d.approval_status);
+  const canApprove = status === 'Awaiting approval' && me?.persona === 'Enforcement Lead' && me.userId !== d.decided_by;
+  const act = async (action: 'Approved' | 'Returned') => {
+    setBusy(true);
+    try {
+      await api.post(`/api/decisions/${txt(d.decision_id)}/approval`, { action, note });
+      toast(`Decision ${action.toLowerCase()}`);
+      onDone();
+    } catch (err) {
+      toast((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="list-item" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 8 }}>
+      <div className="spread" style={{ width: '100%' }}>
+        <div><strong>{txt(d.decision)}</strong><small>{txt(d.rationale)}</small></div>
+        <span className={`badge${status === 'Approved' ? ' good' : status === 'Returned' ? ' warn' : ''}`}>{status}</span>
+      </div>
+      <small>
+        Proposed by {txt(d.decided_by_name ?? d.decided_by)} · {shortDate(d.decided_at)} · PPS {Math.round(Number(d.pps_total))}
+        {d.approver ? ` · ${status.toLowerCase()} by ${txt(d.approver_name ?? d.approver)} ${shortDate(d.approved_at)}${d.approval_note ? `: “${txt(d.approval_note)}”` : ''}` : ''}
+      </small>
+      {canApprove && (
+        <div className="row" style={{ gap: 8, width: '100%' }}>
+          <input className="input" style={{ flex: 1 }} placeholder="Approval note (required)" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Approval note" />
+          <button className="btn sm primary" disabled={busy || note.trim().length < 5} onClick={() => void act('Approved')}>Approve</button>
+          <button className="btn sm" disabled={busy || note.trim().length < 5} onClick={() => void act('Returned')}>Return</button>
+        </div>
+      )}
+      {status === 'Awaiting approval' && me?.userId === d.decided_by && <small className="muted">A different enforcement lead must approve this decision.</small>}
+    </div>
+  );
+}
+
 export function ScoringTab({ caseId, onChange }: { caseId: string; onChange: () => void }) {
   const { data, error, loading, reload } = useApi<Scoring>(`/api/cases/${caseId}/scoring`);
   if (error) return <ErrorState message={error} onRetry={reload} />;
@@ -376,16 +418,11 @@ function ScoringBody({ data, caseId, reload }: { data: Scoring; caseId: string; 
             </div>
           </section>
           <section className="card">
-            <div className="card-head"><h3>Prosecution decision</h3><span className="ai-label">Recorded by a person · audited</span></div>
+            <div className="card-head"><h3>Prosecution decision</h3><span className="ai-label">Proposed by a lead or counsel · approved by a second lead · audited</span></div>
             <div className="card-body">
               {data.decisions.length > 0 && (
                 <div className="list" style={{ marginBottom: 12 }}>
-                  {data.decisions.slice(0, 3).map((d) => (
-                    <div className="list-item" key={txt(d.decision_id)}>
-                      <div><strong>{txt(d.decision)}</strong><small>{txt(d.rationale)}</small></div>
-                      <small>{txt(d.decided_by_name ?? d.decided_by)} · {shortDate(d.decided_at)} · PPS {Math.round(Number(d.pps_total))}</small>
-                    </div>
-                  ))}
+                  {data.decisions.slice(0, 3).map((d) => <DecisionRow key={txt(d.decision_id)} d={d} onDone={reload} />)}
                 </div>
               )}
               {me?.persona === 'Investigator' ? (
@@ -398,7 +435,7 @@ function ScoringBody({ data, caseId, reload }: { data: Scoring; caseId: string; 
                   </select>
                   <textarea className="number" placeholder="Rationale (required). Reference the scenarios and evidence that support the decision." value={rationale} onChange={(e) => setRationale(e.target.value)} aria-label="Decision rationale" />
                   <div className="scenario-actions">
-                    <button className="btn primary" disabled={!decision || rationale.trim().length < 10} onClick={recordDecision}>Record decision</button>
+                    <button className="btn primary" disabled={!decision || rationale.trim().length < 10} onClick={recordDecision}>Propose decision</button>
                   </div>
                 </div>
               )}

@@ -105,6 +105,17 @@ CREATE TABLE IF NOT EXISTS case_app.decision (
   decided_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Four-eyes approval of prosecution decisions: a different Enforcement Lead approves or returns each proposed decision
+CREATE TABLE IF NOT EXISTS case_app.decision_approval (
+  approval_id  BIGSERIAL PRIMARY KEY,
+  decision_id  BIGINT NOT NULL,
+  case_id      TEXT NOT NULL,
+  action       TEXT NOT NULL CHECK (action IN ('Approved', 'Returned')),
+  note         TEXT,
+  approver     TEXT NOT NULL,
+  acted_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS case_app.intake_disposition (
   intake_id    TEXT PRIMARY KEY,
   disposition  TEXT NOT NULL CHECK (disposition IN ('Open case', 'Link to case', 'No further action')),

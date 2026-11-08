@@ -113,14 +113,27 @@ Rules:
 - Write exactly these sections, each starting with a level-2 markdown heading: ${BRIEF_SECTIONS.map((s) => `"## ${s}"`).join(', ')}.
 - In "Recommendation" state one of: Proceed, Proceed – conditional, Consider alternatives, Do not pursue — and say the score is a decision aid; the decision rests with the delegate.
 - Flag synthetic or unconfirmed data (e.g. possible banned-register matches) as such. Do not speculate about restricted AUSTRAC content.
-- Keep each section to 2-6 sentences or a short bullet list.`;
+- Keep each section to 2-6 sentences or a short bullet list.
+- Output only the sections: no title, preamble, classification line, horizontal rules or other headings.`;
 
+const norm = (t: string) => t.toLowerCase().replace(/[^a-z]+/g, ' ').trim();
+
+/**
+ * Splits the draft into the template sections. Anything before the first template heading (titles, classification lines)
+ * and any heading not in the template is dropped; trailing horizontal rules are removed.
+ */
 export function splitSections(markdown: string) {
-  const parts = markdown.split(/^##\s+/m).map((s) => s.trim()).filter(Boolean);
-  return parts.map((p) => {
-    const nl = p.indexOf('\n');
-    return { title: (nl < 0 ? p : p.slice(0, nl)).trim(), body: nl < 0 ? '' : p.slice(nl + 1).trim(), status: 'Draft (AI)' as const };
-  });
+  const wanted = new Map(BRIEF_SECTIONS.map((t) => [norm(t), t]));
+  const out: { title: string; body: string; status: 'Draft (AI)' }[] = [];
+  for (const part of markdown.split(/^##\s+/m).slice(1)) {
+    const nl = part.indexOf('\n');
+    const heading = (nl < 0 ? part : part.slice(0, nl)).replace(/[*#]/g, '').trim();
+    const title = wanted.get(norm(heading)) ?? [...wanted.entries()].find(([k]) => norm(heading).startsWith(k))?.[1];
+    if (!title || out.some((o) => o.title === title)) continue;
+    const body = (nl < 0 ? '' : part.slice(nl + 1)).replace(/(\n\s*[-*_]{3,}\s*)+$/, '').trim();
+    out.push({ title, body, status: 'Draft (AI)' });
+  }
+  return out;
 }
 
 export function registerBriefRoutes(kit: Kit) {
@@ -134,7 +147,9 @@ export function registerBriefRoutes(kit: Kit) {
          WHERE b.case_id = $1 ORDER BY b.version DESC`,
         [id],
       );
-      return { versions: rows, sections_template: BRIEF_SECTIONS };
+      // Current scores, so the UI can flag a draft written before the latest scoring run
+      const { rows: pps } = await kit.lakebase.query(`SELECT total, band, scored_at, params_version FROM gold.pps_score WHERE case_id = $1`, [id]);
+      return { versions: rows, sections_template: BRIEF_SECTIONS, current_pps: pps[0] ?? null };
     }));
 
     /** Streams the AI draft as server-sent events: {type:'delta'|'done'|'error'}. Saved as a new version on completion. */

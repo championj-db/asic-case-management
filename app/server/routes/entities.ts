@@ -5,7 +5,7 @@ import { HttpError, route, seesAllTeams } from '../lib/http';
 import { loadUsers } from '../lib/identity';
 import { apiGet, chat, LLM_ENDPOINT, parseJsonReply } from '../lib/llm';
 import { austracAuthorised, austracSummary, redactDrivers } from '../lib/restricted';
-import type { Kit, Row } from '../lib/types';
+import { statementRows, type Kit, type Row } from '../lib/types';
 import { txt } from '../lib/types';
 
 const Resolution = z.object({ decision: z.enum(['Merge', 'Not the same']), reason: z.string().max(1000).optional() });
@@ -42,20 +42,25 @@ export function registerEntityRoutes(kit: Kit) {
     app.get('/api/search', route(kit, async (req, _res, actor) => {
       const q = txt(req.query.q ?? '').trim();
       if (q.length < 2) return { cases: [], entities: [], evidence: [] };
-      const cases = (await listCases(kit, actor)).filter((c) =>
+      const visible = await listCases(kit, actor);
+      const cases = visible.filter((c) =>
         [c.title, c.case_number, c.respondent_name].some((v) => txt(v ?? '').toLowerCase().includes(q.toLowerCase())),
       ).slice(0, 6);
       const [{ rows: entities }, { rows: evidence }] = await Promise.all([
+        // Rank: exact identifier, name starts with the query, a word starts with it, entities on open cases, then shorter names
         kit.lakebase.query(
-          `SELECT entity_id, name, entity_type, abn_acn, status FROM gold.silver_entity
-           WHERE name ILIKE '%' || $1 || '%' OR abn_acn = regexp_replace($1, '[^0-9]', '', 'g') OR abn = regexp_replace($1, '[^0-9]', '', 'g')
-           ORDER BY (entity_type <> 'person'), length(name) LIMIT 8`,
+          `SELECT e.entity_id, e.name, e.entity_type, e.abn_acn, e.status FROM gold.silver_entity e
+           LEFT JOIN gold.gold_entity_profile p ON p.entity_id = e.entity_id
+           WHERE e.name ILIKE '%' || $1 || '%' OR e.abn_acn = regexp_replace($1, '[^0-9]', '', 'g') OR e.abn = regexp_replace($1, '[^0-9]', '', 'g')
+           ORDER BY (e.abn_acn = regexp_replace($1, '[^0-9]', '', 'g') OR e.abn = regexp_replace($1, '[^0-9]', '', 'g')) DESC,
+                    (e.name ILIKE $1 || '%') DESC, ((' ' || e.name) ILIKE '% ' || $1 || '%') DESC,
+                    coalesce(p.open_cases, 0) DESC, length(e.name) LIMIT 8`,
           [q],
         ),
         kit.lakebase.query(
           `SELECT evidence_id, case_id, filename, doc_type FROM gold.gold_evidence_item
-           WHERE filename ILIKE '%' || $1 || '%' AND case_id = ANY($2) LIMIT 6`,
-          [q, cases.length ? (await listCases(kit, actor)).map((c) => c.case_id) : []],
+           WHERE (filename ILIKE '%' || $1 || '%' OR evidence_id ILIKE $1 || '%') AND case_id = ANY($2) LIMIT 6`,
+          [q, visible.map((c) => c.case_id)],
         ),
       ]);
       return { cases, entities, evidence };
@@ -273,6 +278,25 @@ export function registerEntityRoutes(kit: Kit) {
         } catch (err) {
           models.push({ model_name: name, error: (err as Error).message });
         }
+      }
+      // Validation and calibration metrics per model version (written by 04_train_collapse_model; read as the app)
+      let calibration: Row[] = [];
+      try {
+        calibration = statementRows(await kit.analytics.query(
+          `SELECT horizon_months, model_version, test_auc, ece_raw, ece_calibrated, brier_raw, brier_calibrated, population_rate,
+                  sample_base_rate, n_calibration, n_evaluation, calibrated_from, evaluated_from, created_at
+           FROM ${uc}.collapse_calibration QUALIFY row_number() OVER (PARTITION BY horizon_months, model_version ORDER BY created_at DESC) = 1`,
+        ));
+      } catch (err) {
+        console.error('[admin] calibration metrics unavailable:', (err as Error).message);
+      }
+      const metric = new Map(calibration.map((c) => [`${txt(c.horizon_months)}m/${txt(c.model_version)}`, c]));
+      for (const m of models) {
+        const h = txt(m.model_name).endsWith('_24m') ? '24' : '12';
+        m.metrics = metric.get(`${h}m/${txt(m.version)}`) ?? null;
+        // Scoring serves the 12-month champion only; P(24m) is derived from it (SPEC 8.1)
+        m.serving = h === '12' && ((m.aliases as string[]) ?? []).includes('champion');
+        m.note = h === '24' ? 'Not served: P(24m) is derived from the calibrated 12-month model' : null;
       }
       return { weights, params, proposals, presets, models, uc };
     }));

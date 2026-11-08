@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { audit } from '../lib/audit';
+import { DECISIONS_SQL } from './scoring';
 import { CASES_SQL, getCase, listCases, STAGES, stageIndex } from '../lib/cases';
 import { HttpError, parseJson, route, seesAllTeams } from '../lib/http';
 import { statementRows, type Kit, type Row } from '../lib/types';
@@ -12,6 +13,24 @@ const UpdateCase = z.object({
   summary_ai: z.boolean().optional(),
   reason: z.string().max(2000).optional(),
 });
+
+/**
+ * Movement since the previous quarterly snapshot. The latest history row and the snapshot before it can share the same
+ * agency data (risk is scored on the latest quarterly features), so compare with the snapshot at least ~80 days earlier.
+ * `driver` is the PPS criterion that moved most.
+ */
+const MOVEMENT_CTE = `
+  h AS (SELECT case_id, as_of_date, total, coalesce(p_collapse_12m, 1) AS p12, criteria_json::jsonb AS c FROM gold.pps_score_history),
+  cur AS (SELECT DISTINCT ON (case_id) * FROM h ORDER BY case_id, as_of_date DESC),
+  prev AS (SELECT DISTINCT ON (h.case_id) h.* FROM h JOIN cur USING (case_id)
+           WHERE h.as_of_date <= cur.as_of_date - interval '80 days' ORDER BY h.case_id, h.as_of_date DESC),
+  mv AS (SELECT cur.case_id, cur.total AS cur_total, prev.total AS prev_total, prev.as_of_date AS since,
+                round((cur.total - prev.total)::numeric, 1) AS pps_delta, round(((cur.p12 - prev.p12) * 100)::numeric, 1) AS risk_delta_pts,
+                (SELECT k FROM unnest(ARRAY['financial', 'success', 'harm', 'deterrence', 'urgency']) k
+                 ORDER BY abs((cur.c ->> k)::float - (prev.c ->> k)::float) DESC LIMIT 1) AS driver,
+                (SELECT round(((cur.c ->> k)::float - (prev.c ->> k)::float)::numeric, 1) FROM unnest(ARRAY['financial', 'success', 'harm', 'deterrence', 'urgency']) k
+                 ORDER BY abs((cur.c ->> k)::float - (prev.c ->> k)::float) DESC LIMIT 1) AS driver_delta
+         FROM cur JOIN prev USING (case_id))`;
 
 export function registerCaseRoutes(kit: Kit) {
   kit.server.extend((app) => {
@@ -56,11 +75,7 @@ export function registerCaseRoutes(kit: Kit) {
          ORDER BY due_date LIMIT 1`,
         [id],
       );
-      const decision = await kit.lakebase.query(
-        `SELECT decision, rationale, pps_total, pps_band, decided_by, decided_at FROM case_app.decision
-         WHERE case_id = $1 ORDER BY decided_at DESC LIMIT 1`,
-        [id],
-      );
+      const decision = await kit.lakebase.query(`${DECISIONS_SQL} WHERE d.case_id = $1 ORDER BY d.decided_at DESC LIMIT 1`, [id]);
       return {
         case: { ...c, criteria: parseJson(c.criteria_json, null), stage_index: stageIndex(txt(c.stage)) },
         stages: STAGES,
@@ -116,7 +131,7 @@ export function registerCaseRoutes(kit: Kit) {
       const [tasks, evid, extr, updates] = await Promise.all([
         kit.lakebase.query(
           `SELECT t.*, x.title AS case_title FROM case_app.task t JOIN (${CASES_SQL}) x ON x.case_id = t.case_id
-           WHERE t.status <> 'Done' AND (t.assignee = $1 OR x.team_id = $2) ORDER BY t.due_date NULLS LAST LIMIT 20`,
+           WHERE t.status <> 'Done' AND (t.assignee = $1 OR x.team_id = $2) ORDER BY (t.assignee = $1) DESC, t.due_date NULLS LAST LIMIT 20`,
           [actor.userId, actor.teamId],
         ),
         kit.lakebase.query(
@@ -140,14 +155,31 @@ export function registerCaseRoutes(kit: Kit) {
           [actor.teamId],
         ),
       ]);
-      const overdue = tasks.rows.filter((t) => t.due_date && new Date(txt(t.due_date)) < new Date()).length;
+      const { rows: approvals } = actor.persona === 'Enforcement Lead'
+        ? await kit.lakebase.query(
+            `SELECT q.*, x.title AS case_title FROM (${DECISIONS_SQL}) q JOIN (${CASES_SQL}) x ON x.case_id = q.case_id
+             WHERE q.approval_status = 'Awaiting approval' AND q.decided_by <> $1 ORDER BY q.decided_at`,
+            [actor.userId],
+          )
+        : { rows: [] as Row[] };
+      // Counts over all open tasks (the list above is capped at 20); "mine" = assigned to the persona, else the team's
+      const { rows: tc } = await kit.lakebase.query(
+        `SELECT count(*) FILTER (WHERE t.assignee = $1) AS mine, count(*) FILTER (WHERE t.assignee = $1 AND t.due_date < current_date) AS mine_overdue,
+                count(*) AS team, count(*) FILTER (WHERE t.due_date < current_date) AS team_overdue
+         FROM case_app.task t JOIN (${CASES_SQL}) x ON x.case_id = t.case_id
+         WHERE t.status <> 'Done' AND (t.assignee = $1 OR x.team_id = $2)`,
+        [actor.userId, actor.teamId],
+      );
+      const overdue = Number(tc[0]?.mine_overdue ?? 0);
       return {
         cases,
         tasks: tasks.rows,
         kpis: {
           open_cases: cases.length,
           decision_stage: cases.filter((c) => c.stage === 'Decision').length,
-          tasks_due: tasks.rows.length,
+          tasks_due: Number(tc[0]?.mine ?? 0),
+          team_tasks: Number(tc[0]?.team ?? 0),
+          team_overdue: Number(tc[0]?.team_overdue ?? 0),
           overdue,
           evidence_unreviewed: Number(evid.rows[0]?.n ?? 0),
           evidence_hot: Number(evid.rows[0]?.hot ?? 0),
@@ -156,6 +188,7 @@ export function registerCaseRoutes(kit: Kit) {
           agency_updates: updates.rows.length,
         },
         activity: updates.rows,
+        approvals,
       };
     }));
 
@@ -163,18 +196,11 @@ export function registerCaseRoutes(kit: Kit) {
     app.get('/api/portfolio', route(kit, async (_req, _res, actor) => {
       const cases = await listCases(kit, actor);
       const { rows: movers } = await kit.lakebase.query(
-        `WITH h AS (
-           SELECT case_id, as_of_date, total, p_collapse_12m,
-                  row_number() OVER (PARTITION BY case_id ORDER BY as_of_date DESC) AS rn
-           FROM gold.pps_score_history)
-         SELECT cur.case_id, x.title, x.respondent_name, cur.total AS pps, prev.total AS prev_pps,
-                round((cur.total - prev.total)::numeric, 1) AS pps_delta,
-                round(((cur.p_collapse_12m - prev.p_collapse_12m) * 100)::numeric, 1) AS risk_delta_pts,
-                prev.as_of_date AS since
-         FROM h cur JOIN h prev ON prev.case_id = cur.case_id AND prev.rn = 2
-         JOIN (${CASES_SQL}) x ON x.case_id = cur.case_id
-         WHERE cur.rn = 1
-         ORDER BY greatest(abs(cur.total - prev.total), abs(cur.p_collapse_12m - prev.p_collapse_12m) * 100) DESC LIMIT 8`,
+        `WITH ${MOVEMENT_CTE}
+         SELECT mv.*, mv.cur_total AS pps, mv.prev_total AS prev_pps, x.title, x.respondent_name
+         FROM mv JOIN (${CASES_SQL}) x ON x.case_id = mv.case_id
+         WHERE abs(mv.pps_delta) >= 1 OR abs(mv.risk_delta_pts) >= 5
+         ORDER BY greatest(abs(mv.pps_delta), abs(mv.risk_delta_pts)) DESC LIMIT 8`,
       );
       const scope = new Set(cases.map((c) => c.case_id));
       const open = cases.filter((c) => c.stage !== 'Closed');
@@ -223,21 +249,18 @@ export function registerCaseRoutes(kit: Kit) {
         ),
       ]);
       const { rows: attention } = await kit.lakebase.query(
-        `WITH h AS (SELECT case_id, total, p_collapse_12m, criteria_json, row_number() OVER (PARTITION BY case_id ORDER BY as_of_date DESC) rn
-                    FROM gold.pps_score_history)
+        `WITH ${MOVEMENT_CTE}
          SELECT x.case_id, x.title, x.respondent_name, x.stage, x.cost_to_date_aud, x.pps, x.pps_band, x.criteria_json,
-                round((cur.total - prev.total)::numeric, 1) AS pps_delta,
-                round(((cur.p_collapse_12m - prev.p_collapse_12m) * 100)::numeric, 1) AS risk_delta_pts,
-                x.p_collapse_12m, x.est_litigation_cost_aud
-         FROM (${CASES_SQL}) x JOIN h cur ON cur.case_id = x.case_id AND cur.rn = 1
-         LEFT JOIN h prev ON prev.case_id = x.case_id AND prev.rn = 2
-         ORDER BY greatest(abs(coalesce(cur.total - prev.total, 0)), abs(coalesce(cur.p_collapse_12m - prev.p_collapse_12m, 0)) * 100, CASE WHEN x.pps >= 70 THEN 10 ELSE 0 END) DESC
+                mv.pps_delta, mv.risk_delta_pts, mv.driver, mv.driver_delta, mv.since, x.p_collapse_12m, x.est_litigation_cost_aud
+         FROM (${CASES_SQL}) x LEFT JOIN mv ON mv.case_id = x.case_id
+         ORDER BY greatest(abs(coalesce(mv.pps_delta, 0)), abs(coalesce(mv.risk_delta_pts, 0)), CASE WHEN x.pps >= 70 THEN 10 ELSE 0 END) DESC
          LIMIT 6`,
       );
       const { rows: since } = await kit.lakebase.query(
         `SELECT count(*) FILTER (WHERE action = 'Advanced stage') AS advanced,
                 count(*) FILTER (WHERE object_type = 'scenario') AS scenarios,
-                count(*) FILTER (WHERE object_type = 'decision') AS decisions
+                count(*) FILTER (WHERE object_type = 'decision' AND action LIKE 'Approved decision%') AS decisions,
+                count(*) FILTER (WHERE object_type = 'decision' AND action LIKE 'Proposed decision%') AS decisions_proposed
          FROM case_app.audit_log WHERE at > now() - interval '30 days'`,
       );
       return {

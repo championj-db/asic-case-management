@@ -39,6 +39,19 @@ export function TimelineTab({ caseId }: { caseId: string }) {
       toast((err as Error).message);
     }
   };
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const reviewPicked = async (status: string) => {
+    const ids = [...picked];
+    try {
+      for (const id of ids) await api.post(`/api/events/${id}/review`, { status });
+      toast(`${ids.length} event${ids.length === 1 ? '' : 's'} ${status}`);
+      setPicked(new Set());
+      reload();
+    } catch (err) {
+      toast((err as Error).message);
+      reload();
+    }
+  };
   const exportCsv = () => {
     const rows = [['date', 'type', 'description', 'source', 'evidence', 'provenance'], ...events.map((e) => [txt(e.event_date).slice(0, 10), txt(e.event_type), txt(e.description), txt(e.source), ((e.evidence_ids as string[]) ?? []).join(' '), txt(e.provenance)])];
     const csv = rows.map((r) => r.map((v) => `"${v.replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -145,22 +158,49 @@ export function TimelineTab({ caseId }: { caseId: string }) {
         <table className="sr-only"><caption>Chronology</caption><tbody>{events.map((e) => <tr key={txt(e.event_id)}><td>{txt(e.event_date)}</td><td>{txt(e.event_type)}</td><td>{txt(e.description)}</td></tr>)}</tbody></table>
       </section>
       <section className="card" style={{ marginTop: 20 }}>
-        <div className="card-head"><h3>✦ Suggested events from evidence</h3><span className="ai-label">{data?.suggested.length ?? 0} awaiting review</span></div>
+        <div className="card-head">
+          <h3>✦ Suggested events from evidence</h3>
+          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+            <span className="ai-label">{data?.suggested.length ?? 0} awaiting review{(data?.suggested.length ?? 0) > 40 ? ' · showing 40' : ''}</span>
+            <button className="btn sm" disabled={!picked.size} onClick={() => void reviewPicked('confirmed')}>Confirm selected{picked.size ? ` (${picked.size})` : ''}</button>
+            <button className="btn sm ghost" disabled={!picked.size} onClick={() => void reviewPicked('rejected')}>Reject selected</button>
+          </div>
+        </div>
         {(data?.suggested.length ?? 0) === 0 ? <Empty title="Nothing to review" /> : (
           <table className="data-table">
-            <thead><tr><th>Date</th><th>Event</th><th>Evidence</th><th /></tr></thead>
+            <thead>
+              <tr>
+                <th style={{ width: 28 }}>
+                  <input type="checkbox" aria-label="Select all suggested events shown"
+                    checked={picked.size > 0 && picked.size === Math.min(data?.suggested.length ?? 0, 40)}
+                    onChange={(ev) => setPicked(ev.target.checked ? new Set((data?.suggested ?? []).slice(0, 40).map((e) => txt(e.event_id))) : new Set())} />
+                </th>
+                <th>Date</th><th>Type</th><th>Event</th><th>Evidence</th><th />
+              </tr>
+            </thead>
             <tbody>
-              {data?.suggested.slice(0, 40).map((e) => (
-                <tr key={txt(e.event_id)}>
-                  <td className="mono nowrap">{shortDate(e.event_date)}</td>
-                  <td>{txt(e.description)}</td>
-                  <td>{((e.evidence_ids as string[]) ?? []).map((ev) => <a key={ev} className="citation" href={`/cases/${caseId}/evidence?doc=${ev}`}>{ev}</a>)}</td>
-                  <td className="right nowrap">
-                    <button className="btn sm" onClick={() => review(e, 'confirmed')}>Confirm</button>{' '}
-                    <button className="btn sm ghost" onClick={() => review(e, 'rejected')}>Reject</button>
-                  </td>
-                </tr>
-              ))}
+              {data?.suggested.slice(0, 40).map((e) => {
+                const m = txt(e.description).match(/^([A-Za-z ]{3,24}):\s*(.*)$/s);
+                const kind = m ? m[1].trim() : '';
+                const desc = m ? m[2] : txt(e.description);
+                const id = txt(e.event_id);
+                return (
+                  <tr key={id}>
+                    <td>
+                      <input type="checkbox" aria-label={`Select event ${shortDate(e.event_date)}`} checked={picked.has(id)}
+                        onChange={(ev) => setPicked((p) => { const n = new Set(p); if (ev.target.checked) n.add(id); else n.delete(id); return n; })} />
+                    </td>
+                    <td className="mono nowrap">{shortDate(e.event_date)}</td>
+                    <td>{kind ? <span className="badge">{kind.charAt(0).toUpperCase() + kind.slice(1).toLowerCase()}</span> : null}</td>
+                    <td>{desc}</td>
+                    <td>{((e.evidence_ids as string[]) ?? []).map((ev) => <a key={ev} className="citation" href={`/cases/${caseId}/evidence?doc=${ev}`}>{ev}</a>)}</td>
+                    <td className="right nowrap">
+                      <button className="btn sm" onClick={() => void review(e, 'confirmed')}>Confirm</button>{' '}
+                      <button className="btn sm ghost" onClick={() => void review(e, 'rejected')}>Reject</button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

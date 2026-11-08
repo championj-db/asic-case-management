@@ -31,9 +31,12 @@ export const monthYear = (v: unknown): string => {
   const d = v ? toDate(v) : null;
   return d ? d.toLocaleDateString('en-AU', { month: 'short', year: '2-digit' }) : '—';
 };
+/** Day and month; the year is added whenever it is not the current year, so multi-year chronologies stay unambiguous. */
 export const shortDate = (v: unknown): string => {
   const d = v ? toDate(v) : null;
-  return d ? d.toLocaleDateString('en-AU', { day: '2-digit', month: 'short' }) : v ? txt(v) : '—';
+  if (!d) return v ? txt(v) : '—';
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString('en-AU', sameYear ? { day: '2-digit', month: 'short' } : { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
 export const monthLabel = (v: unknown): string => {

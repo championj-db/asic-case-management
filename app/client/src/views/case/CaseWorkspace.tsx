@@ -81,7 +81,7 @@ export function CaseWorkspace() {
               <span className="badge">PPS <strong>{c.pps === null || c.pps === undefined ? '—' : Math.round(Number(c.pps))}</strong></span>
               <span className="badge">{c.risk_band === 'Collapsed' ? 'Respondent' : 'Collapse risk'} <strong>{riskLabel(c.p_collapse_12m, c.risk_band, c.risk_collapse_date, c.risk_collapse_status)}</strong></span>
               <span className="badge">Next key date <strong>{data.next_key_date ? `${date(data.next_key_date.due_date)} · ${txt(data.next_key_date.title)}` : '—'}</strong></span>
-              {data.latest_decision && <span className="badge">Decision <strong>{txt(data.latest_decision.decision)}</strong></span>}
+              {data.latest_decision && <span className="badge">Decision <strong>{txt(data.latest_decision.decision)} · {txt(data.latest_decision.approval_status)}</strong></span>}
             </div>
           </div>
           <div className="header-actions">
@@ -133,8 +133,10 @@ export function CaseWorkspace() {
             {STAGE_LABEL(c.stage)} → <strong>{next}</strong>. The change is recorded in the audit log with your identity
             {me ? ` (${me.displayName}, ${me.persona})` : ''}.
           </p>
-          {next === 'Litigation / Referral' && !data.latest_decision && (
-            <p className="trend-up">No prosecution decision has been recorded yet. Record one on Scoring &amp; Scenarios first.</p>
+          {next === 'Litigation / Referral' && data.latest_decision?.approval_status !== 'Approved' && (
+            <p className="trend-up">
+              {data.latest_decision ? `The prosecution decision is ${txt(data.latest_decision.approval_status).toLowerCase()}.` : 'No prosecution decision has been proposed yet.'} An approved decision is expected before litigation or referral.
+            </p>
           )}
           <label>
             Note (optional)

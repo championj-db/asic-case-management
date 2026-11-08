@@ -11,53 +11,101 @@ interface Section {
   status: Status;
 }
 
-const CITE = /\[(EV|EVT|SR|PPS|SCN|HM)(?::([^\]]+))?\]/g;
+const INLINE = /\[(EV|EVT|SR|PPS|SCN|HM)(?::([^\]]+))?\]|\*\*(.+?)\*\*|\*(?!\s)(.+?)\*/g;
 
-/** Renders citation tokens as chips and flags factual sentences that carry no citation (SPEC 8.6). */
+/** Inline markdown (bold, italic) plus citation chips; flags factual sentences that carry no citation (SPEC 8.6). */
+function Sentences({ text, onCite }: { text: string; onCite: (kind: string, ref: string) => void }) {
+  const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z(])/);
+  return (
+    <>
+      {sentences.map((s, si) => {
+        const nodes: ReactNode[] = [];
+        let last = 0;
+        let cited = false;
+        for (const m of s.matchAll(INLINE)) {
+          nodes.push(s.slice(last, m.index));
+          if (m[1]) {
+            cited = true;
+            const kind = m[1];
+            const ref = m[2] ?? '';
+            nodes.push(
+              <button key={`${si}-${m.index}`} className="citation" onClick={() => onCite(kind, ref)} title={`${kind}${ref ? ` ${ref}` : ''}`}>
+                {kind === 'PPS' ? 'PPS' : kind === 'SR' ? ref.split(':').pop() : `${kind}-${ref.replace(/^EV-/, '').slice(0, 10)}`}
+              </button>,
+            );
+          } else if (m[3]) nodes.push(<strong key={`${si}-${m.index}`}>{m[3]}</strong>);
+          else if (m[4]) nodes.push(<em key={`${si}-${m.index}`}>{m[4]}</em>);
+          last = (m.index ?? 0) + m[0].length;
+        }
+        nodes.push(s.slice(last));
+        const plain = s.replace(INLINE, '').trim();
+        const needsCite = !cited && plain.length > 40 && !/^(Recommendation|Note|Proceed|Consider|Do not pursue)\b/.test(plain);
+        return (
+          <span key={si} className={needsCite ? 'uncited' : undefined} title={needsCite ? 'No citation — verify or add a source before review' : undefined}>
+            {nodes}{' '}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+type Block = { kind: 'p' | 'h' | 'ul' | 'ol'; lines: string[] };
+
+/** Block markdown the model is allowed to use: paragraphs, sub-headings, bullet and numbered lists. Rules (---) are dropped. */
+function toBlocks(text: string): Block[] {
+  const blocks: Block[] = [];
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    const prev = blocks[blocks.length - 1];
+    if (!line || /^[-*_]{3,}$/.test(line)) {
+      if (prev && prev.kind === 'p') blocks.push({ kind: 'p', lines: [] });
+      continue;
+    }
+    const h = line.match(/^#{1,6}\s+(.*)$/);
+    const ul = line.match(/^[-*•]\s+(.*)$/);
+    const ol = line.match(/^\d+[.)]\s+(.*)$/);
+    if (h) blocks.push({ kind: 'h', lines: [h[1]] });
+    else if (ul) {
+      if (prev?.kind === 'ul') prev.lines.push(ul[1]);
+      else blocks.push({ kind: 'ul', lines: [ul[1]] });
+    } else if (ol) {
+      if (prev?.kind === 'ol') prev.lines.push(ol[1]);
+      else blocks.push({ kind: 'ol', lines: [ol[1]] });
+    }
+    else if (prev?.kind === 'p') prev.lines.push(line);
+    else blocks.push({ kind: 'p', lines: [line] });
+  }
+  return blocks.filter((b) => b.lines.length);
+}
+
 function CitedText({ text, onCite }: { text: string; onCite: (kind: string, ref: string) => void }) {
-  const paras = text.split(/\n{2,}/);
   return (
     <div className="brief-body">
-      {paras.map((p, pi) => {
-        const sentences = p.split(/(?<=[.!?])\s+(?=[A-Z(•\-*])/);
-        return (
-          <p key={pi}>
-            {sentences.map((s, si) => {
-              const nodes: ReactNode[] = [];
-              let last = 0;
-              let cited = false;
-              for (const m of s.matchAll(CITE)) {
-                cited = true;
-                nodes.push(s.slice(last, m.index));
-                const kind = m[1];
-                const ref = m[2] ?? '';
-                nodes.push(
-                  <button key={`${si}-${m.index}`} className="citation" onClick={() => onCite(kind, ref)} title={`${kind}${ref ? ` ${ref}` : ''}`}>
-                    {kind === 'PPS' ? 'PPS' : kind === 'SR' ? ref.split(':').pop() : `${kind}-${ref.replace(/^EV-/, '').slice(0, 10)}`}
-                  </button>,
-                );
-                last = (m.index ?? 0) + m[0].length;
-              }
-              nodes.push(s.slice(last));
-              const needsCite = !cited && s.trim().length > 40 && !/^(#|Recommendation:|Note:)/.test(s.trim());
-              return (
-                <span key={si} className={needsCite ? 'uncited' : undefined} title={needsCite ? 'No citation — verify or add a source before review' : undefined}>
-                  {nodes}{' '}
-                </span>
-              );
-            })}
-          </p>
-        );
+      {toBlocks(text).map((b, i) => {
+        if (b.kind === 'h') return <h4 key={i}><Sentences text={b.lines[0]} onCite={onCite} /></h4>;
+        if (b.kind === 'ul' || b.kind === 'ol') {
+          const items = b.lines.map((l, j) => <li key={j}><Sentences text={l} onCite={onCite} /></li>);
+          return b.kind === 'ul' ? <ul key={i}>{items}</ul> : <ol key={i}>{items}</ol>;
+        }
+        return <p key={i}><Sentences text={b.lines.join(' ')} onCite={onCite} /></p>;
       })}
     </div>
   );
+}
+
+/** Older drafts may carry a title block as extra "sections"; show only the template sections when they are present. */
+function templateOnly(sections: Section[], template?: string[]): Section[] {
+  if (!template?.length) return sections;
+  const keep = sections.filter((s) => template.includes(s.title));
+  return keep.length >= Math.ceil(template.length / 2) ? keep : sections;
 }
 
 export function BriefTab({ caseId }: { caseId: string }) {
   const { me } = useSession();
   const toast = useToast();
   const nav = useNavigate();
-  const { data, error, loading, reload } = useApi<{ versions: Row[] }>(`/api/cases/${caseId}/brief`);
+  const { data, error, loading, reload } = useApi<{ versions: Row[]; sections_template?: string[]; current_pps?: Row | null }>(`/api/cases/${caseId}/brief`);
   const [sections, setSections] = useState<Section[] | null>(null);
   const [version, setVersion] = useState<Row | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
@@ -69,7 +117,7 @@ export function BriefTab({ caseId }: { caseId: string }) {
     const v = data?.versions[0];
     if (v && !dirty) {
       setVersion(v);
-      setSections(v.sections as Section[]);
+      setSections(templateOnly(v.sections as Section[], data?.sections_template));
     }
   }, [data, dirty]);
 
@@ -132,6 +180,7 @@ export function BriefTab({ caseId }: { caseId: string }) {
 
   if (error) return <ErrorState message={error} onRetry={reload} />;
   const canReview = me?.persona !== 'Investigator';
+  const stale = Boolean(version?.created_at && data?.current_pps?.scored_at && new Date(txt(data.current_pps.scored_at)) > new Date(txt(version.created_at)));
   const reviewed = sections?.filter((s) => s.status === 'Reviewed').length ?? 0;
   return (
     <section className="case-panel active" data-od-id="brief-panel">
@@ -162,6 +211,11 @@ export function BriefTab({ caseId }: { caseId: string }) {
               <span className="badge">{reviewed === sections.length ? 'Reviewed' : `${reviewed}/${sections.length} sections reviewed`}</span>
             </div>
             <div className="card-body">
+              {stale && (
+                <p className="note trend-up" role="status" style={{ marginBottom: 12 }}>
+                  Scores have changed since this draft (PPS now {txt(data?.current_pps?.total)} · {txt(data?.current_pps?.band)}, re-scored {dateTime(data?.current_pps?.scored_at)}). Regenerate or update the PPS section before review.
+                </p>
+              )}
               {version?.generated ? <AiLabel model={version.ai_model} at={version.created_at}>AI draft</AiLabel> : <span className="ai-label">Edited by {txt(version?.author_name ?? version?.author)} · {dateTime(version?.created_at)}</span>}
               <div className="brief-editor" style={{ marginTop: 12 }}>
                 {sections.map((s, i) => (
@@ -192,7 +246,7 @@ export function BriefTab({ caseId }: { caseId: string }) {
             <div className="card-head"><h3>Version history</h3></div>
             <div className="card-body list">
               {data?.versions.map((v) => (
-                <button key={txt(v.version)} className="list-item link" style={{ textDecoration: 'none', width: '100%', textAlign: 'left' }} onClick={() => { setVersion(v); setSections(v.sections as Section[]); setDirty(false); }}>
+                <button key={txt(v.version)} className="list-item link" style={{ textDecoration: 'none', width: '100%', textAlign: 'left' }} onClick={() => { setVersion(v); setSections(templateOnly(v.sections as Section[], data?.sections_template)); setDirty(false); }}>
                   <div><strong>v{txt(v.version)} {v.generated ? '· ✦ AI draft' : '· edited'}</strong><small>{txt(v.author_name ?? v.author)} · {dateTime(v.created_at)}</small></div>
                   {version?.version === v.version ? <span className="badge">Open</span> : null}
                 </button>
