@@ -1,0 +1,170 @@
+/* App additions built only from the prototype's tokens (design.css). Interactive states the static prototype
+   did not need: command palette, dialogs, skeletons, empty/error states, provenance + AI marks, sortable tables. */
+
+a { color: inherit; }
+.link { color: inherit; text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; cursor: pointer; background: none; border: 0; padding: 0; font: inherit; }
+.link:hover { text-decoration-color: var(--fg); }
+.nav a { min-height: 44px; border-radius: var(--radius-md); padding: 0 var(--space-3); display: flex; align-items: center; justify-content: space-between; text-decoration: none; }
+.nav a:hover { background: var(--border-soft); }
+.nav a.active { background: var(--surface); box-shadow: inset 3px 0 0 var(--accent); font-weight: 650; }
+.case-tabs a { min-height: 44px; padding: 0 var(--space-4); border-bottom: 2px solid transparent; display: inline-flex; align-items: center; text-decoration: none; white-space: nowrap; }
+.case-tabs a:hover { background: var(--border-soft); }
+.case-tabs a.active { border-bottom-color: var(--fg); font-weight: 650; }
+.case-tabs a .count { margin-left: 6px; }
+.btn:disabled, .preset:disabled { opacity: .5; cursor: not-allowed; }
+.btn.sm { min-height: 32px; padding: 0 var(--space-3); font-size: var(--text-xs); }
+.btn.ghost { background: transparent; }
+.btn.danger { border-color: var(--danger); color: var(--danger); }
+.row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+.spread { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+.stack { display: grid; gap: var(--space-3); }
+.muted { color: var(--muted); }
+.small { font-size: var(--text-xs); }
+.right { text-align: right; }
+.nowrap { white-space: nowrap; }
+.data-table td small, .data-table td .note { display: block; margin-top: 2px; }
+.data-table th.sortable { cursor: pointer; user-select: none; }
+.data-table th.sortable:hover { color: var(--fg); }
+.data-table tbody tr.clickable { cursor: pointer; }
+.data-table tbody tr.selected { background: var(--surface-warm); }
+.table-tools { display: flex; gap: var(--space-2); align-items: center; padding: var(--space-3) var(--space-5); border-bottom: 1px solid var(--border-soft); flex-wrap: wrap; }
+.table-tools .number { max-width: 280px; }
+.select { height: 40px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); padding: 0 var(--space-3); }
+textarea.number { height: auto; min-height: 96px; padding-top: var(--space-3); resize: vertical; }
+
+/* User menu + persona switcher */
+.menu { position: absolute; right: var(--space-6); top: 64px; z-index: 30; min-width: 280px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--elev-raised); padding: var(--space-2); }
+.menu button { width: 100%; text-align: left; border: 0; background: transparent; padding: var(--space-3); border-radius: var(--radius-sm); display: grid; }
+.menu button:hover, .menu button.active { background: var(--border-soft); }
+.menu small { color: var(--muted); }
+.menu .menu-label { padding: var(--space-2) var(--space-3); color: var(--muted); font: 600 11px/1.2 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+
+/* Command palette (Ctrl+K) */
+.overlay { position: fixed; inset: 0; background: color-mix(in oklab, var(--fg), transparent 60%); z-index: 40; display: grid; place-items: start center; padding-top: 12vh; }
+.palette { width: min(640px, 92vw); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--elev-raised); overflow: hidden; }
+.palette input { width: 100%; height: 56px; border: 0; border-bottom: 1px solid var(--border); padding: 0 var(--space-5); background: transparent; font-size: var(--text-base); outline: none; }
+.palette-results { max-height: 56vh; overflow: auto; padding: var(--space-2); }
+.palette-group { padding: var(--space-2) var(--space-3) var(--space-1); color: var(--muted); font: 600 11px/1.2 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+.palette-item { width: 100%; border: 0; background: transparent; text-align: left; padding: var(--space-3); border-radius: var(--radius-sm); display: flex; justify-content: space-between; gap: var(--space-3); }
+.palette-item.active, .palette-item:hover { background: var(--border-soft); }
+
+/* Dialog */
+.dialog { width: min(560px, 92vw); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--elev-raised); }
+.dialog .card-body { display: grid; gap: var(--space-4); }
+.dialog label { display: grid; gap: var(--space-1); font-weight: 600; }
+.dialog label span { font-weight: 400; color: var(--muted); font-size: var(--text-xs); }
+
+/* States */
+.skeleton { background: linear-gradient(90deg, var(--border-soft), color-mix(in oklab, var(--border-soft), transparent 60%), var(--border-soft)); background-size: 200% 100%; animation: shimmer 1.4s infinite linear; border-radius: var(--radius-sm); }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+.empty, .error-state { padding: var(--space-8) var(--space-5); text-align: center; color: var(--muted); display: grid; gap: var(--space-3); justify-items: center; }
+.error-state { color: var(--danger); }
+.error-state p { color: var(--muted); }
+
+/* Provenance + AI marks */
+.prov { display: inline-flex; align-items: center; min-height: 20px; padding: 0 7px; border-radius: var(--radius-pill); font: 600 10px/1 var(--font-mono); letter-spacing: .05em; text-transform: uppercase; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; vertical-align: middle; }
+.prov.public { border-color: var(--success); color: var(--success); }
+.prov.synthetic { border-style: dashed; }
+.prov.derived { border-color: var(--viz-8); color: var(--viz-8); }
+.prov.restricted { border-color: var(--danger); color: var(--danger); }
+.ai-mark { font-family: var(--font-mono); font-weight: 600; }
+.agency { display: inline-flex; min-width: 64px; font: 650 var(--text-xs)/1 var(--font-mono); letter-spacing: .04em; }
+.ai-panel { border-left: 3px solid var(--viz-8); background: var(--bg); padding: var(--space-4); border-radius: 0 var(--radius-md) var(--radius-md) 0; }
+.risk-chip { display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px; border-radius: var(--radius-pill); border: 1px solid var(--border); font-size: var(--text-xs); white-space: nowrap; }
+.risk-chip.Low { border-color: var(--success); }
+.risk-chip.Elevated { border-color: var(--warn); }
+.risk-chip.High { border-color: var(--danger); }
+.risk-chip.Critical { border-color: var(--danger); background: color-mix(in oklab, var(--danger), transparent 88%); }
+.band-mark { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
+.band-mark.Low { background: var(--success); } .band-mark.Elevated { background: var(--warn); } .band-mark.High, .band-mark.Critical { background: var(--danger); }
+
+/* Evidence */
+.doc-list .list-item { cursor: pointer; padding: var(--space-3) var(--space-2); border-radius: var(--radius-sm); }
+.doc-list .list-item.active { background: var(--surface-warm); }
+.doc-list .list-item:hover { background: var(--border-soft); }
+.doc-list-scroll { max-height: 520px; overflow: auto; margin-top: var(--space-3); }
+.paper pre { white-space: pre-wrap; font: inherit; margin: 0; }
+mark.confirmed { background: color-mix(in oklab, var(--success), transparent 82%); }
+mark.rejected { background: transparent; text-decoration: line-through; text-decoration-color: var(--muted); }
+mark.focus { outline: 2px solid var(--accent); }
+.doc-review { max-height: 680px; overflow: auto; }
+.tag-row { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.tag { display: inline-flex; align-items: center; gap: 4px; min-height: 26px; padding: 0 8px; border-radius: var(--radius-pill); border: 1px solid var(--border); font-size: var(--text-xs); background: transparent; }
+.tag.on { background: var(--fg); color: var(--surface); border-color: var(--fg); }
+.search-mode { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-pill); overflow: hidden; }
+.search-mode button { border: 0; background: transparent; padding: 4px 10px; font-size: var(--text-xs); }
+.search-mode button.on { background: var(--fg); color: var(--surface); }
+
+/* Timeline swim lanes */
+.lanes { overflow-x: auto; }
+.lane-svg text { font: 500 11px var(--font-body); fill: var(--fg); }
+.lane-svg .axis text { fill: var(--muted); font-family: var(--font-mono); font-size: 10px; }
+.lane-svg .ev { cursor: pointer; }
+.lane-svg .ev:hover circle, .lane-svg .ev.sel circle { stroke: var(--accent); stroke-width: 3; }
+
+/* Network */
+.network svg { width: 100%; height: 520px; display: block; }
+.network .n-label { font: 600 11px var(--font-body); fill: var(--fg); pointer-events: none; }
+.network .edge { stroke: var(--border); }
+.network .edge.path { stroke: var(--accent); stroke-width: 3; }
+.network .node-g { cursor: pointer; }
+.network .node-g.sel circle.core { stroke: var(--accent); }
+.network-legend { display: flex; gap: var(--space-4); flex-wrap: wrap; padding: var(--space-3) var(--space-5); border-top: 1px solid var(--border-soft); font-size: var(--text-xs); color: var(--muted); }
+
+/* Brief */
+.brief-section { padding: var(--space-4) 0; border-bottom: 1px solid var(--border-soft); }
+.brief-section:last-child { border-bottom: 0; }
+.brief-section textarea { width: 100%; min-height: 120px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); padding: var(--space-3); font: inherit; line-height: var(--leading-body); }
+.brief-body p { margin: 0 0 var(--space-2); }
+.uncited { background: color-mix(in oklab, var(--warn), transparent 80%); border-bottom: 1px dashed var(--warn); }
+.streaming { white-space: pre-wrap; font-family: var(--font-body); color: var(--muted); max-height: 420px; overflow: auto; }
+
+/* Charts */
+.trajectory div { cursor: default; }
+.trajectory div[title] { cursor: help; }
+.matrix .bubble { transform: translate(-50%, -50%); }
+.matrix .bubble:hover { transform: translate(-50%, -50%) scale(1.08); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
+.kpi strong.sm { font-size: var(--text-xl); }
+.split-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); }
+@media (max-width: 1120px) { .split-2 { grid-template-columns: 1fr; } }
+.scroll-x { overflow-x: auto; }
+.pill-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.decision-form { display: grid; gap: var(--space-3); margin-top: var(--space-4); }
+
+/* The prototype slides the toast by its own height, which leaves an empty toast peeking out; hide it until shown. */
+.toast:not(.show) { visibility: hidden; transition: transform var(--motion-base) var(--ease-standard), visibility 0s linear var(--motion-base); }
+.list-item > div > small { display: block; }
+.band-mark.Collapsed { background: var(--fg); }
+.risk-chip.Collapsed { border-color: var(--fg); font-weight: 600; }
+/* Trajectory: reserve room for the axis labels; colour carries no category here, so one hue with the latest snapshot emphasised. */
+.trajectory { margin-bottom: 28px; }
+.trajectory div span { white-space: nowrap; }
+.trajectory div, .trajectory div:nth-child(n) { background: var(--viz-2); opacity: 0.55; }
+.trajectory div:last-child { background: var(--viz-5); opacity: 1; }
+/* Network labels hidden by the declutter pass appear on hover / keyboard focus, above other nodes */
+.n-label.minor { opacity: 0; pointer-events: none; }
+.node-g:hover .n-label.minor, .node-g:focus .n-label.minor { opacity: 1; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+.n-label { paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
+.risk-chip { white-space: nowrap; }
+.risk-chip { align-self: center; flex-shrink: 0; height: auto; }
+.brief-body ul, .brief-body ol { margin: 0 0 var(--space-3); padding-left: 1.25rem; }
+.brief-body li { margin-bottom: var(--space-1); }
+.brief-body h4 { margin: var(--space-3) 0 var(--space-2); font-size: var(--text-sm); }
+/* 1120px: the prototype collapses to an icon rail, but nav items here are text links. Keep a compact labelled sidebar. */
+@media (max-width: 1120px) and (min-width: 761px) {
+  .shell { grid-template-columns: 172px minmax(0, 1fr); }
+  .nav a .count { display: none; }
+  .nav-label { display: block; }
+}
+/* WCAG AA: white text on the brand red is 3.4:1. Darken the primary action background (still on-palette) to pass 4.5:1. */
+:root { --accent-strong: color-mix(in oklab, var(--accent), black 22%); }
+.btn.primary { background: var(--accent-strong); border-color: var(--accent-strong); }
+.btn.primary:hover { background: color-mix(in oklab, var(--accent-strong), black 8%); border-color: color-mix(in oklab, var(--accent-strong), black 8%); }
+.btn.primary:disabled { background: color-mix(in oklab, var(--accent-strong), white 45%); border-color: transparent; }
+/* Matrix: bubbles centred on low-risk cases overhang the x-axis; keep the axis title clear of them */
+.matrix { margin-bottom: 64px; }
+.matrix::after { bottom: -52px; }
+.badge.good { border-color: var(--success); color: var(--success); }
+.badge.warn { border-color: var(--warn); }

@@ -11,12 +11,15 @@ def gold_case_inputs():
                   .select(F.col("acn").alias("respondent_acn")).distinct()
                   .withColumn("recent_smr_flag", F.lit(True)))
     # Share of offence elements covered by tagged evidence: tags are captured in the app (Lakebase), so null here.
+    budget = (spark.read.table("gold_case_budget").groupBy("case_id")
+              .agg(F.sum("approved_budget_aud").alias("approved_budget_aud")))
     return (spark.read.table("silver_case")
             .join(smr_recent, "respondent_acn", "left")
+            .join(budget, "case_id", "left")
             .select("case_id", "case_number", "title", "case_type", "stage", "priority", "team_id", "lead_user", "opened_at",
                     F.concat(F.lit("CO-"), "respondent_acn").alias("respondent_entity_id"), "respondent_acn",
                     "est_recoverable_aud", "est_litigation_cost_aud", "est_duration_months", "cost_to_date_aud",
                     "consumers_affected", "total_consumer_loss_aud", "vulnerable_cohort", "strategic_priority_score",
-                    "counsel_evidence_strength", F.lit(None).cast("double").alias("evidence_element_coverage"),
+                    "approved_budget_aud", "counsel_evidence_strength", F.lit(None).cast("double").alias("evidence_element_coverage"),
                     "limitation_date", F.coalesce("recent_smr_flag", F.lit(False)).alias("recent_smr_flag"),
                     "story_tag", "provenance"))

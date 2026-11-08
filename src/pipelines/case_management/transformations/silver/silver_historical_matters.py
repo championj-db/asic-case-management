@@ -52,6 +52,6 @@ def silver_historical_matters():
          .withColumn("recovered_amount_aud", F.lit(None).cast("double"))
          .withColumn("recovery_is_estimate", F.lit(True))
          .withColumn("source", F.lit("judgment"))
-         .withColumn("provenance", F.lit("public"))
+         .withColumn("provenance", F.lit("derived"))  # LLM-extracted facts from public judgments
          .select(*COLUMNS))
     return syn.unionByName(j)

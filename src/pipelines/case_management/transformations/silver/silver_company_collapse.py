@@ -18,5 +18,5 @@ def silver_company_collapse():
     exad = F.col("collapse_status") == "EXAD"
     return (hist.join(notices, "acn", "left")
             .withColumn("collapse_date", F.when(exad, F.coalesce("notice_date", "history_date")).otherwise(F.col("history_date")))
-            .withColumn("date_source", F.when(exad & F.col("notice_date").isNotNull(), "published_notice").otherwise("register"))
+            .withColumn("date_source", F.when(exad & F.col("notice_date").isNotNull(), "published_notice_synthetic").otherwise("register"))
             .select("acn", "collapse_status", "collapse_date", "date_source"))

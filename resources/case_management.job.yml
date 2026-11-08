@@ -1,11 +1,17 @@
 # End-to-end orchestration for ASIC Intelligent Case Management.
 # Stages: public ingest -> synthetic gap layer -> evidence docs -> SDP medallion
-#         -> collapse model -> risk + PPS scoring -> evidence Vector Search index
+#         -> collapse model -> risk + PPS scoring -> restricted-data controls -> Lakebase sync for the app
+#         (+ evidence Vector Search index)
 resources:
   jobs:
     case_management_job:
       name: asic-case-management-${bundle.target}
       max_concurrent_runs: 1
+      # Weekly refresh: archives a new register snapshot (status history drives collapse labels) and re-scores.
+      schedule:
+        quartz_cron_expression: "0 0 3 ? * MON"
+        timezone_id: Australia/Sydney
+        pause_status: PAUSED
       parameters:
         - name: catalog
           default: ${var.catalog}
@@ -33,6 +39,8 @@ resources:
           default: ${var.include_abn_bulk_extract}
         - name: random_seed
           default: ${var.random_seed}
+        - name: austrac_group
+          default: ${var.austrac_group}
       tasks:
         - task_key: ingest_public
           notebook_task:
@@ -74,3 +82,15 @@ resources:
             - task_key: medallion
           notebook_task:
             notebook_path: ../src/notebooks/06_build_evidence_vector_index.ipynb
+
+        - task_key: apply_security
+          depends_on:
+            - task_key: score_risk_and_pps
+          notebook_task:
+            notebook_path: ../src/notebooks/07_apply_security.ipynb
+
+        - task_key: sync_lakebase
+          depends_on:
+            - task_key: apply_security
+          notebook_task:
+            notebook_path: ../src/notebooks/08_sync_lakebase.ipynb

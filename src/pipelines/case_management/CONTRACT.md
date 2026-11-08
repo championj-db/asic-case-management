@@ -30,10 +30,10 @@ One table per source, `bronze_<source_id>` / `bronze_syn_<dataset>`. Raw columns
 | `silver_entity` | entity_id, entity_type (company/person/trust/licensee), name, abn_acn, status, match_confidence |
 | `silver_source_record` | source_record_id, entity_id, agency (ASIC/ATO/APRA/AUSTRAC/AFCA/DFAT/ACNC/ABR), source_table, source_key, match_score, loaded_at |
 | `silver_resolution_review` | candidate pairs with match_score between 0.6 and 0.9 (auto-merge at 0.9 or above) |
-| `silver_relationship` | from_entity, to_entity, rel_type (director_of, secretary_of, shares_name, shares_address, licensed_as), source, valid_from, valid_to |
+| `silver_relationship` | from_entity, to_entity, rel_type (director_of, secretary_of, shares_business_name), source, valid_from, valid_to |
 | `silver_evidence_parsed` | evidence_id, case_id, path, sha256, parsed_text (ai_parse_document), page_count |
 | `silver_evidence_ai` | evidence_id, case_id, extraction (summary, people, companies, accounts, amounts, dates, events), ai_model, ai_generated_at |
-| `silver_evidence_extraction` | evidence_id, kind (entity/event/amount/date/account), value, span, status = 'suggested', model, generated_at |
+| `silver_evidence_extraction` | extraction_id, evidence_id, case_id, kind (entity_person/entity_company/account/amount/date/event), value, span, span_start, span_end (offsets in parsed_text), event_date, status = 'suggested', model, generated_at, provenance=derived. Review state lives in the app (Lakebase `case_app.extraction_review`) |
 | `silver_judgment_matters` | LLM-extracted facts per ASIC v ... judgment (respondents, provisions, outcome, penalty, dates) |
 | `person_banned_match_candidates` (temporary view) | person <-> banned-register candidates with match_score and reasons |
 
@@ -56,15 +56,25 @@ One table per source, `bronze_<source_id>` / `bronze_syn_<dataset>`. Raw columns
 
 **`gold_evidence_chunks`** (Change Data Feed enabled, for Vector Search): chunk_id (primary key), evidence_id, case_id, doc_type, chunk_index, chunk_text, source_system, provenance.
 
-**`gold_evidence_item`**: evidence_id, case_id, filename, sha256, source, custodian, ingested_at, ai_summary, ai_model.
+**`gold_evidence_item`**: evidence_id, case_id, filename, doc_type, sha256, sha256_at_creation, hash_verified, source, custodian, document_date, ingested_at, bytes, ai_summary, ai_model, ai_generated_at, parsed_text, page_count, provenance.
 
-**`gold_custody_event`**: evidence_id, actor, action (ingested/parsed), event_ts, hash_after.
+**`gold_custody_event`**: custody_event_id, evidence_id, actor, action (created/ingested/parsed/ai_extracted), event_ts, hash_after, provenance. App-side views/exports/uploads: `case_app.custody_access`.
 
-**`gold_case_event`**: event_id, case_id, event_date, event_type, description, evidence_ids, entity_ids, status (suggested/confirmed).
+**`gold_case_event`**: event_id, case_id, event_date, event_type, description, evidence_ids, entity_ids, status (suggested/confirmed), source, ai_flag, provenance.
 
-**`gold_entity_profile`**: entity_id, the 360 panel fields (ASIC, licences, ATO, APRA, AUSTRAC count only, AFCA, sanctions match, banned match, open cases), sources_count.
+**`gold_entity_profile`**: entity_id, the 360 panel fields (ASIC, licences, ATO, APRA, AUSTRAC count only, AFCA, sanctions match, possible banned-director matches, open cases), source_record_count, and per field-group provenance (asic_/abr_/ato_/ato_tt_/apra_/austrac_/afca_/sanctions_provenance).
 
-**`gold_entity_network`**: from_entity, to_entity, rel_type, weight, hop-ready edges for depth-2 neighbourhoods.
+**`gold_entity_network`**: from_entity, to_entity, rel_type (officer_of, shares_director, co_director, shares_business_name, possible_match), weight, provenance; hop-ready edges for depth-2 neighbourhoods.
+
+**`gold_case_party`**: case_id, entity_id (CO-<acn> / PE-<person_id>), entity_name, entity_type, party_kind, role (respondent, witness, related = shares a director with the respondent), source, provenance.
+
+**`gold_case_budget`** / **`gold_case_spend`**: approved budget per case and category; monthly spend per case and category summing to cost_to_date (synthetic, deterministic). `gold_case_inputs` also carries approved_budget_aud.
+
+Identity matches between 0.6 and 0.9 never feed features or scores; they surface only in Resolution Review.
 
 ## Tables written by notebooks (not the pipeline)
-`risk_score`, `pps_score`, `scoring_weights`, `intervention_presets`, `scenario`, SQL function `pps_compute`, index `evidence_chunks_index`.
+* 04: `collapse_calibration` (Platt a/b per horizon and model version, population rate from P1, ECE/Brier before and after).
+* 05: `risk_score` (calibrated P12; P24 = 1 − (1 − P12)²; `risk_status` Active/Collapsed with `collapse_status`, `collapse_date`; collapsed entities have null probabilities and band `Collapsed`) and `risk_score_history` (per quarterly as-of; drivers carry agency + restricted flags), `scoring_weights`, `pps_params` (every PPS constant incl. fitted P(success) coefficients, versioned), `intervention_presets`, `pps_score` and `pps_score_history` (with inputs_json, as_of_date, params_version), `scenario`, SQL function `pps_compute`.
+* 06: index `evidence_chunks_index`.
+* 07: `is_austrac_authorised()`, views `secure_austrac_smr` and `secure_entity_austrac` (the app queries these on behalf of the user).
+* 08: refreshes the Lakebase synced tables listed in `config/lakebase_synced_tables.json` (created once by `scripts/setup_lakebase.sh`).
