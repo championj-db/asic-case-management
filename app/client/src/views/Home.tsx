@@ -167,14 +167,9 @@ export function ExecutiveView() {
   const updated = new Date(data.generated_at);
   return (
     <section className="view active" data-od-id="executive-briefing-view">
-      <div className="exec-hero">
+      <div className="exec-hero" style={{ alignItems: 'center' }}>
         <div>
           <span className="ai-label" style={{ color: 'inherit' }}>Executive briefing · Enforcement portfolio</span>
-          <h1>Cases in motion, capital at risk and likely return.</h1>
-          <p>
-            A live oversight view combining case progression, committed spend, model-predicted recovery and urgency. Predictions are probability-adjusted
-            decision aids from the insolvency model and PPS; they are not forecasts of outcomes.
-          </p>
         </div>
         <div className="exec-date">
           <strong>{updated.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
