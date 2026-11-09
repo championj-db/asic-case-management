@@ -70,7 +70,7 @@ export function describeDriver(d: RawDriver): string {
     case 'director_prior_failed_companies':
       return `Directors linked to ${v} prior failed ${plural(v, 'company', 'companies')}`;
     case 'related_collapsed_entities':
-      return `${v} related ${plural(v, 'entity has', 'entities have')} collapsed`;
+      return `${v} related ${plural(v, 'entity has', 'entities have')} entered external administration or been deregistered`;
     case 'banned_director_count':
       return `${v} ${plural(v, 'director', 'directors')} on the ASIC banned register`;
     case 'breach_reports_12m':
@@ -121,6 +121,6 @@ export function redactDrivers(raw: unknown, authorised: boolean): Driver[] {
         sentence: 'Restricted agency signal (AUSTRAC) — visible to authorised users only',
       };
     }
-    return { ...d, restricted, sentence: describeDriver(d) };
+    return { ...d, restricted, label: d.feature === 'related_collapsed_entities' ? 'Related entities insolvent or deregistered' : d.label, sentence: describeDriver(d) };
   });
 }

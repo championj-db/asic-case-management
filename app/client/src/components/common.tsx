@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { monthYear, riskLabel, txt } from '../lib/format';
+import { collapseKind, monthYear, RISK_DEFINITION, riskLabel, txt } from '../lib/format';
 
 export type Row = Record<string, unknown>;
 
@@ -134,12 +134,12 @@ export function RiskChip({ p, band, label = '12m', collapsedOn, collapseStatus }
     return (
       <span className="risk-chip Collapsed" title={`${riskLabel(p, band, collapsedOn, collapseStatus)} (ASIC register). No forward probability applies.`}>
         <span className="band-mark Collapsed" aria-hidden="true" />
-        Collapsed{collapsedOn ? ` · ${monthYear(collapsedOn)}` : ''}
+        {collapseKind(collapseStatus)}{collapsedOn ? ` · ${monthYear(collapsedOn)}` : ''}
       </span>
     );
   if (p === null || p === undefined) return <span className="risk-chip">Not scored</span>;
   return (
-    <span className={`risk-chip ${txt(band)}`} title={`Collapse probability (${label}) — model output`}>
+    <span className={`risk-chip ${txt(band)}`} title={`${RISK_DEFINITION.replace('12 months', label === '12m' ? '12 months' : label)} — model output`}>
       <span className={`band-mark ${txt(band)}`} aria-hidden="true" />
       {Math.round(Number(p) * 100)}% · {txt(band)}
     </span>

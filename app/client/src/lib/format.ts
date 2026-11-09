@@ -107,10 +107,16 @@ export function txt(v: unknown): string {
   return JSON.stringify(v);
 }
 
-/** Collapse status text: an already-collapsed entity shows the event and its date, never a probability. */
-export const collapseKind = (status: unknown): string => (status === 'EXAD' ? 'External administration' : 'Deregistered');
+/**
+ * Legal status of an entity that has already failed (ASIC register): external administration (liquidation, voluntary
+ * administration, receivership; Corporations Act Ch 5) or deregistration (Pt 5A.1). Such an entity has no forward probability.
+ */
+export const collapseKind = (status: unknown): string => (status === 'EXAD' ? 'In external administration' : 'Deregistered');
+/** Shared wording: "insolvency risk" = P(entering external administration or being deregistered) within the horizon. */
+export const RISK_TERM = 'Insolvency risk';
+export const RISK_DEFINITION = 'Probability of entering external administration (insolvency) or being deregistered within 12 months';
 export const riskLabel = (p: unknown, band: unknown, collapsedOn?: unknown, collapseStatus?: unknown): string => {
-  if (band === 'Collapsed') return `Collapsed${collapsedOn ? ` ${date(collapsedOn)}` : ''} · ${collapseKind(collapseStatus)}`;
+  if (band === 'Collapsed') return `${collapseKind(collapseStatus)}${collapsedOn ? ` · ${date(collapsedOn)}` : ''}`;
   if (p === null || p === undefined) return 'Not scored';
   return `${Math.round(Number(p) * 100)}% · ${txt(band)}`;
 };

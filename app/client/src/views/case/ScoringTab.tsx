@@ -75,7 +75,7 @@ const FIELDS: Field[] = [
   { key: 'cost', label: 'Litigation cost', hint: 'Estimated external and internal cost · $m', min: 0.05, max: 10, step: 0.05, get: (i) => i.litigation_cost / 1e6, set: (i, v) => ({ ...i, litigation_cost: Math.max(v, 0.01) * 1e6 }) },
   { key: 'recovery', label: 'Recoverable amount', hint: 'Excludes penalties · $m', min: 0, max: 50, step: 0.1, get: (i) => i.recoverable / 1e6, set: (i, v) => ({ ...i, recoverable: v * 1e6 }) },
   { key: 'success', label: 'Probability of success', hint: 'Counsel assessment · %', min: 1, max: 99, step: 1, get: (i) => Math.round(i.p_success * 100), set: (i, v) => ({ ...i, p_success: v / 100 }) },
-  { key: 'collapse', label: 'Collapse probability', hint: 'Within 24 months (model) · %', min: 0, max: 99, step: 1, get: (i) => Math.round(i.p_collapse_24m * 100), set: (i, v) => withCollapse24(i, v / 100) },
+  { key: 'collapse', label: 'Insolvency risk', hint: 'External administration or deregistration within 24 months (model) · %', min: 0, max: 99, step: 1, get: (i) => Math.round(i.p_collapse_24m * 100), set: (i, v) => withCollapse24(i, v / 100) },
   { key: 'loss', label: 'Consumer loss', hint: 'Harm criterion input · $m', min: 0, max: 100, step: 0.1, get: (i) => i.consumer_loss / 1e6, set: (i, v) => ({ ...i, consumer_loss: v * 1e6 }) },
 ];
 const ADVANCED: Field[] = [
@@ -252,7 +252,7 @@ function ScoringBody({ data, caseId, reload }: { data: Scoring; caseId: string; 
                 ))}
               </div>
               <p className="note">
-                {data.risk_defaulted ? 'No collapse score for this respondent; default probabilities used. ' : ''}
+                {data.risk_defaulted ? 'No insolvency-risk score for this respondent; default probabilities used. ' : ''}
                 {!data.austrac_authorised ? 'Urgency may include restricted agency signals (not shown). ' : ''}
                 Criteria, weights and thresholds require ASIC confirmation. {parityOk ? '' : `Live engine differs from batch score (${data.total}) — parameters may have changed since scoring.`}
               </p>
@@ -266,17 +266,17 @@ function ScoringBody({ data, caseId, reload }: { data: Scoring; caseId: string; 
           </section>
           <section className="card" data-od-id="collapse-model">
             <div className="card-head">
-              <h3>{data.risk?.band === 'Collapsed' ? 'Respondent status' : 'Collapse probability'}</h3>
+              <h3>{data.risk?.band === 'Collapsed' ? 'Respondent status' : 'Insolvency risk'}</h3>
               {data.risk && <AiLabel model={data.risk.model_version.split(';')[0]} at={data.risk.scored_at}>Model</AiLabel>}
             </div>
             {data.risk?.band === 'Collapsed' ? (
               <div className="card-body">
                 <div className="risk-number">
-                  <strong>Collapsed</strong>
-                  <span>{collapseKind(data.risk.collapse_status)} · {date(data.risk.collapse_date)}</span>
+                  <strong style={{ fontSize: 'var(--text-xl)' }}>{collapseKind(data.risk.collapse_status)}</strong>
+                  <span>Since {date(data.risk.collapse_date)}</span>
                 </div>
                 <p className="note">
-                  From the ASIC register. The respondent has already collapsed, so no forward probability applies: the PPS treats collapse as certain,
+                  From the ASIC register. The respondent is already in external administration or deregistered, so no forward probability applies: the PPS treats the insolvency as certain,
                   which removes most of the expected recovery. Consider recovery from directors, related entities or insurers, or a non-financial outcome.
                 </p>
               </div>
@@ -286,7 +286,7 @@ function ScoringBody({ data, caseId, reload }: { data: Scoring; caseId: string; 
                   <strong>{pct(data.risk.p_collapse_12m)}</strong>
                   <span>{data.risk.band} · 12 months</span>
                   <p className="note">24 months: {pct(data.risk.p_collapse_24m)}</p>
-                  <Sparkline points={data.risk_history.map((h) => Number(h.p_collapse_12m))} label="Collapse probability over time" height={36} />
+                  <Sparkline points={data.risk_history.map((h) => Number(h.p_collapse_12m))} label="Insolvency risk over time" height={36} />
                 </div>
                 <div className="drivers">
                   {data.risk.drivers.map((d, i, all) => (
@@ -295,12 +295,12 @@ function ScoringBody({ data, caseId, reload }: { data: Scoring; caseId: string; 
                       <strong title="Share of the shown drivers' total contribution (SHAP, log-odds)">{Number(d.shap) >= 0 ? '↑' : '↓'} {Math.round((Math.abs(Number(d.shap)) / (all.reduce((a, x) => a + Math.abs(Number(x.shap) || 0), 0) || 1)) * 100)}%</strong>
                     </div>
                   ))}
-                  <p className="note">Probabilities are calibrated to the collapse rate observed on the ASIC register. ↑ raises / ↓ lowers risk; % is each driver&rsquo;s share of the shown contribution (SHAP).</p>
+                  <p className="note">Probability of entering external administration or being deregistered, calibrated to the rate observed on the ASIC register. ↑ raises / ↓ lowers risk; % is each driver&rsquo;s share of the shown contribution (SHAP).</p>
                   <p className="note">Top drivers by SHAP contribution. Cross-agency signals (ATO, APRA, AFCA, AUSTRAC) are what ASIC cannot see on its own registers.</p>
                 </div>
               </div>
             ) : (
-              <div className="card-body"><p className="note">Respondent is not scored by the collapse model; defaults are used.</p></div>
+              <div className="card-body"><p className="note">Respondent is not scored by the insolvency model; defaults are used.</p></div>
             )}
           </section>
           <section className="card" data-od-id="sensitivity-chart">
@@ -379,7 +379,7 @@ function ScoringBody({ data, caseId, reload }: { data: Scoring; caseId: string; 
                     : be.costAlwaysAbove
                       ? 'Prosecution stays above the conditional threshold across the cost range tested'
                       : `Prosecution remains above threshold while litigation cost is below ${money(be.maxLitigationCost, 2)}`}
-                  {be.maxCollapse24 === null ? '.' : be.collapseAlwaysAbove ? ', at any collapse probability.' : ` or collapse probability stays below ${Math.round(be.maxCollapse24 * 100)}%.`}
+                  {be.maxCollapse24 === null ? '.' : be.collapseAlwaysAbove ? ', at any insolvency risk.' : ` or insolvency risk (24m) stays below ${Math.round(be.maxCollapse24 * 100)}%.`}
                 </span>
               </div>
               <div className="row" style={{ marginTop: 16 }}>
@@ -398,7 +398,7 @@ function ScoringBody({ data, caseId, reload }: { data: Scoring; caseId: string; 
             <div className="card-head"><h3>Scenario comparison</h3><span className="badge">{comparisonRows.length} of 4</span></div>
             <div className="card-body" style={{ padding: 0 }}>
               <table className="comparison">
-                <thead><tr><th>Scenario</th><th>PPS</th><th>P(collapse)</th><th>Net recovery</th></tr></thead>
+                <thead><tr><th>Scenario</th><th>PPS</th><th>Insolvency risk</th><th>Net recovery</th></tr></thead>
                 <tbody>
                   {comparisonRows.map((s, i) => (
                     <tr key={i}>

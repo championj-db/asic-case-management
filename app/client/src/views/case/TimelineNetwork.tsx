@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { api, useApi } from '../../lib/api';
-import { date, monthLabel, pct, shortDate, titleCase, txt } from '../../lib/format';
+import { collapseKind, date, monthLabel, pct, shortDate, titleCase, txt } from '../../lib/format';
 import { AiLabel, Empty, ErrorState, Prov, RiskChip, SkeletonBlock, useToast, type Row } from '../../components/common';
 
 /** Selection shared between Timeline and Network (SPEC 7 S4.3: selecting a node highlights its events). */
@@ -382,7 +382,7 @@ export function NetworkTab({ caseId }: { caseId: string }) {
   return (
     <section className="case-panel active" data-od-id="network-panel">
       <div className="decision-bar">
-        <div><h2>Entities &amp; Network</h2><p>Resolved parties, officers and related companies. Node size = connections in view; ring = collapse risk (not identity confidence). Annotations never change source data.</p></div>
+        <div><h2>Entities &amp; Network</h2><p>Resolved parties, officers and related companies. Node size = connections in view; ring = insolvency risk (not identity confidence). Annotations never change source data.</p></div>
         <div className="header-actions">
           <button className="btn" disabled={!sel} onClick={() => { if (pathFrom && sel && pathFrom !== sel && view) { const p = shortestPath(view.edges, pathFrom, sel); setPath(p); setPathFrom(null); if (!p.length) toast('No path between those entities in this view'); } else { setPathFrom(sel); toast('Now select the second entity, then Find path again'); } }}>
             {pathFrom ? 'Find path to…' : 'Find path'}
@@ -427,7 +427,7 @@ export function NetworkTab({ caseId }: { caseId: string }) {
           )}
         </div>
         <div className="network-legend">
-          <span>Ring: <span className="band-mark Low" />Low <span className="band-mark Elevated" />Elevated <span className="band-mark High" />High/Critical risk · grey = not scored</span>
+          <span>Ring: <span className="band-mark Low" />Low <span className="band-mark Elevated" />Elevated <span className="band-mark High" />High/Critical risk · black = insolvent or deregistered · grey = not scored</span>
           <span>Thick ring = case party · dot = person · dashed edge = unconfirmed possible match</span>
           {data?.truncated && <span className="trend-up">View truncated at 60 entities — filter relationships or expand selectively</span>}
           <span>Double-click a node for Entity 360</span>
@@ -466,7 +466,7 @@ export function NetworkTab({ caseId }: { caseId: string }) {
                   <td>{txt(n.role ?? n.type)}</td>
                   <td>{e ? REL_LABEL[txt(e.rel_type)] ?? txt(e.rel_type) : '—'} {e ? <Prov p={e.provenance} /> : null}</td>
                   <td className="num">{txt(n.degree)}</td>
-                  <td className="num">{n.risk_band === 'Collapsed' ? 'Collapsed' : pct(n.p_collapse_12m)}</td>
+                  <td className="num">{n.risk_band === 'Collapsed' ? collapseKind(n.risk_collapse_status) : pct(n.p_collapse_12m)}</td>
                 </tr>
               );
             })}
