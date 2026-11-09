@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router';
 import { useApi } from '../lib/api';
-import { ago, date, money, monthLabel, shortDate, signed, STAGE_LABEL, titleCase, abbrev, pct, txt } from '../lib/format';
+import { ago, collapseKind, date, money, monthLabel, shortDate, signed, STAGE_LABEL, titleCase, abbrev, pct, txt } from '../lib/format';
 import { Empty, ErrorState, PageSkeleton, Prov, RiskChip, useSession, useSort, type Row } from '../components/common';
 
 /* ---------------- S1 My Work ---------------- */
@@ -53,7 +53,7 @@ export function MyWorkView() {
             ) : (
               <table className="data-table">
                 <thead>
-                  <tr><th>Case</th><th>Stage</th><th className="num">PPS</th><th>Collapse risk</th><th>Next deadline</th></tr>
+                  <tr><th>Case</th><th>Stage</th><th className="num">PPS</th><th>Insolvency risk</th><th>Next deadline</th></tr>
                 </thead>
                 <tbody>
                   {data.cases.map((c) => (
@@ -145,7 +145,7 @@ function attentionSignal(a: Row): { signal: string; action: string } {
   const risk = Number(a.risk_delta_pts ?? 0);
   const d = Number(a.pps_delta ?? 0);
   const ratio = Number((a.criteria as Row | null)?.return_ratio ?? 0);
-  if (risk >= 5) return { signal: `Collapse risk ${signed(risk)} pts`, action: 'Consider asset preservation' };
+  if (risk >= 5) return { signal: `Insolvency risk ${signed(risk)} pts`, action: 'Consider asset preservation' };
   if (Number(a.pps) >= 70) return { signal: `PPS reached ${Math.round(Number(a.pps))}`, action: 'Advance to decision' };
   if (d <= -5) return { signal: `PPS ${signed(d, 1)}`, action: 'Review scope and cost' };
   if (ratio < 1) return { signal: `Predicted ROI ${ratio.toFixed(2)}×`, action: 'Consider alternatives' };
@@ -167,14 +167,9 @@ export function ExecutiveView() {
   const updated = new Date(data.generated_at);
   return (
     <section className="view active" data-od-id="executive-briefing-view">
-      <div className="exec-hero">
+      <div className="exec-hero" style={{ alignItems: 'center' }}>
         <div>
           <span className="ai-label" style={{ color: 'inherit' }}>Executive briefing · Enforcement portfolio</span>
-          <h1>Cases in motion, capital at risk and likely return.</h1>
-          <p>
-            A live oversight view combining case progression, committed spend, model-predicted recovery and urgency. Predictions are probability-adjusted
-            decision aids from the collapse model and PPS; they are not forecasts of outcomes.
-          </p>
         </div>
         <div className="exec-date">
           <strong>{updated.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
@@ -187,7 +182,7 @@ export function ExecutiveView() {
         <div className="kpi"><span>Committed portfolio spend</span><strong>{money(spend)}</strong><small>{budget ? `${Math.round((spend / budget) * 100)}% of approved budget` : ''}</small></div>
         <div className="kpi"><span>Predicted gross recovery</span><strong>{money(gross)}</strong><small>Probability-adjusted</small></div>
         <div className="kpi"><span>Probability-adjusted net return</span><strong>{money(net)}</strong><small className={net >= 0 ? 'trend-good' : 'trend-up'}>{spend ? `${(gross / Math.max(Number(p.committed_spend), 1)).toFixed(2)}× return on spend to date` : ''}</small></div>
-        <div className="kpi"><span>High collapse risk</span><strong>{txt(p.high_collapse ?? 0)}</strong><small className="trend-up">Respondents at High or Critical{Number(p.collapsed_respondents ?? 0) ? ` · ${txt(p.collapsed_respondents)} already collapsed` : ''}</small></div>
+        <div className="kpi"><span>High insolvency risk</span><strong>{txt(p.high_collapse ?? 0)}</strong><small className="trend-up">Respondents at High or Critical{Number(p.collapsed_respondents ?? 0) ? ` · ${txt(p.collapsed_respondents)} already insolvent or deregistered` : ''}</small></div>
       </div>
       <div className="grid-main">
         <div className="column">
@@ -305,7 +300,7 @@ export function PortfolioView() {
       <header className="page-head">
         <div>
           <h1>Enforcement portfolio</h1>
-          <p>Prioritise matters by PPS, collapse probability, recoverable amount and current spend.</p>
+          <p>Prioritise matters by PPS, insolvency risk, recoverable amount and current spend.</p>
         </div>
       </header>
       <div className="kpis">
@@ -313,7 +308,7 @@ export function PortfolioView() {
         <div className="kpi"><span>Estimated recoverable</span><strong>{money(k.est_recoverable)}</strong></div>
         <div className="kpi"><span>Cost to date</span><strong>{money(k.cost_to_date)}</strong></div>
         <div className="kpi"><span>Average PPS</span><strong>{k.avg_pps === null ? '—' : Math.round(Number(k.avg_pps))}</strong></div>
-        <div className="kpi"><span>High collapse risk</span><strong>{k.high_collapse}</strong>{k.collapsed ? <small>{k.collapsed} respondents already collapsed</small> : null}</div>
+        <div className="kpi"><span>High insolvency risk</span><strong>{k.high_collapse}</strong>{k.collapsed ? <small>{k.collapsed} respondents already insolvent or deregistered</small> : null}</div>
       </div>
       <div className="grid-main">
         <section className="card">
@@ -321,7 +316,7 @@ export function PortfolioView() {
             <h3>Priority matrix</h3>
             <span className="ai-label">Bubble size · recoverable amount · colour · stage</span>
           </div>
-          <div className="matrix" role="img" aria-label="Case priority matrix: PPS against collapse probability">
+          <div className="matrix" role="img" aria-label="Case priority matrix: PPS against insolvency risk">
             {data.cases
               .filter((c) => c.pps !== null && c.pps !== undefined)
               .map((c) => {
@@ -337,8 +332,8 @@ export function PortfolioView() {
                       height: size,
                       background: STAGE_COLOR[txt(c.stage)] ?? 'var(--viz-2)',
                     }}
-                    title={`${titleCase(c.respondent_name)} · PPS ${Math.round(Number(c.pps))} · ${c.risk_band === 'Collapsed' ? 'respondent collapsed' : `collapse ${pct(c.p_collapse_12m)}`} · ${money(c.est_recoverable_aud)} recoverable · ${STAGE_LABEL(c.stage)}`}
-                    aria-label={`${titleCase(c.respondent_name)}, PPS ${Math.round(Number(c.pps))}, ${c.risk_band === 'Collapsed' ? 'respondent collapsed' : `collapse risk ${pct(c.p_collapse_12m)}`}`}
+                    title={`${titleCase(c.respondent_name)} · PPS ${Math.round(Number(c.pps))} · ${c.risk_band === 'Collapsed' ? 'respondent insolvent or deregistered' : `insolvency risk ${pct(c.p_collapse_12m)}`} · ${money(c.est_recoverable_aud)} recoverable · ${STAGE_LABEL(c.stage)}`}
+                    aria-label={`${titleCase(c.respondent_name)}, PPS ${Math.round(Number(c.pps))}, ${c.risk_band === 'Collapsed' ? 'respondent insolvent or deregistered' : `insolvency risk ${pct(c.p_collapse_12m)}`}`}
                     onClick={() => nav(`/cases/${txt(c.case_id)}/scoring`)}
                   >
                     {abbrev(txt(c.respondent_name ?? c.title))}
@@ -364,7 +359,7 @@ export function PortfolioView() {
                 <div className="list-item" key={txt(m.case_id)} style={{ cursor: 'pointer' }} onClick={() => nav(`/cases/${txt(m.case_id)}/scoring`)}>
                   <div>
                     <strong>{titleCase(m.respondent_name ?? m.title)}</strong>
-                    <p>{riskLed ? 'Collapse model · new agency data' : `Led by ${(CRITERION_LABEL[txt(m.driver)] ?? 'score').toLowerCase()} (${signed(Number(m.driver_delta ?? d))} pts)`} · since {date(m.since)}</p>
+                    <p>{riskLed ? 'Insolvency model · new agency data' : `Led by ${(CRITERION_LABEL[txt(m.driver)] ?? 'score').toLowerCase()} (${signed(Number(m.driver_delta ?? d))} pts)`} · since {date(m.since)}</p>
                   </div>
                   <span className={`mono ${riskLed ? (r > 0 ? 'trend-up' : 'trend-good') : d > 0 ? 'trend-good' : ''}`}>
                     {riskLed ? `Risk ${signed(r)}` : `PPS ${signed(d)}`}
@@ -384,7 +379,7 @@ export function PortfolioView() {
                 {th('title', 'Case')}
                 {th('stage', 'Stage')}
                 {th('pps', 'PPS', 'num')}
-                {th('p_collapse_12m', 'Collapse 12m', 'num')}
+                {th('p_collapse_12m', 'Insolvency risk 12m', 'num')}
                 {th('est_recoverable_aud', 'Recoverable', 'num')}
                 {th('cost_to_date_aud', 'Cost to date', 'num')}
                 {th('opened_at', 'Age')}
@@ -396,7 +391,7 @@ export function PortfolioView() {
                   <td><strong>{titleCase(c.respondent_name ?? c.title)}</strong><small className="note">{txt(c.case_number)} · {txt(c.team_name ?? c.team_id)}</small></td>
                   <td><span className="stage-chip">{STAGE_LABEL(c.stage)}</span></td>
                   <td className="num">{c.pps === null || c.pps === undefined ? '—' : Math.round(Number(c.pps))}</td>
-                  <td className="num">{c.risk_band === 'Collapsed' ? 'Collapsed' : pct(c.p_collapse_12m)}</td>
+                  <td className="num">{c.risk_band === 'Collapsed' ? collapseKind(c.risk_collapse_status) : pct(c.p_collapse_12m)}</td>
                   <td className="num">{money(c.est_recoverable_aud)}</td>
                   <td className="num">{money(c.cost_to_date_aud)}</td>
                   <td>{ago(c.opened_at)}</td>

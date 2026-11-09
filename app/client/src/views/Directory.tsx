@@ -43,7 +43,7 @@ export function CasesView() {
           <div className="scroll-x">
             <table className="data-table">
               <thead>
-                <tr>{th('title', 'Case')}{th('case_type', 'Type')}{th('stage', 'Stage')}{th('pps', 'PPS', 'num')}{th('pps_band', 'Recommendation')}{th('p_collapse_12m', 'Collapse risk')}{th('lead_name', 'Lead')}</tr>
+                <tr>{th('title', 'Case')}{th('case_type', 'Type')}{th('stage', 'Stage')}{th('pps', 'PPS', 'num')}{th('pps_band', 'Recommendation')}{th('p_collapse_12m', 'Insolvency risk')}{th('lead_name', 'Lead')}</tr>
               </thead>
               <tbody>
                 {sorted.map((c) => (
@@ -177,7 +177,7 @@ export function IntakeView() {
                 <p style={{ marginBottom: 16 }}>{txt(d.item.summary)} <Prov p={d.item.provenance} /></p>
                 <div className="kpis" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
                   {d.risk?.band === 'Collapsed' ? (
-                    <div className="kpi"><span>Entity status</span><strong className="sm">Collapsed</strong><small>{collapseKind(d.risk.collapse_status)} on {date(d.risk.collapse_date)} · ASIC register</small></div>
+                    <div className="kpi"><span>Entity status</span><strong className="sm">{collapseKind(d.risk.collapse_status)}</strong><small>Since {date(d.risk.collapse_date)} · ASIC register</small></div>
                   ) : (
                     <div className="kpi"><span>Top risk driver</span><strong className="sm">{d.risk?.drivers?.[0] ? txt(d.risk.drivers[0].label) : '—'}</strong><small>{d.risk?.drivers?.[0] ? txt(d.risk.drivers[0].sentence) : 'No model score'}</small></div>
                   )}
@@ -201,7 +201,7 @@ export function IntakeView() {
                         <button className="btn sm" onClick={() => setReason(`${txt(suggestion.disposition)}: ${((suggestion.reasons as string[]) ?? []).join('; ')}`)}>Use as starting reason</button>
                       </div>
                     ) : (
-                      <p className="note">The assistant reads the report, the entity’s cross-agency profile, collapse risk and open cases, then proposes a disposition with reasons. It never decides.</p>
+                      <p className="note">The assistant reads the report, the entity’s cross-agency profile, insolvency risk and open cases, then proposes a disposition with reasons. It never decides.</p>
                     )}
                   </div>
                 </section>
@@ -252,11 +252,11 @@ export function EntitiesView() {
       <section className="card">
         <div className="table-tools">
           <input className="number" placeholder="Name or ACN" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search entities" />
-          <span className="note">Showing entities with open cases first, then highest collapse risk</span>
+          <span className="note">Showing entities with open cases first, then highest insolvency risk</span>
         </div>
         {error ? <ErrorState message={error} onRetry={reload} /> : loading && !data ? <SkeletonBlock rows={8} /> : (data?.entities.length ?? 0) === 0 ? <Empty title="No entities match" /> : (
           <table className="data-table">
-            <thead><tr><th>Entity</th><th>Status</th><th>Agencies</th><th className="num">Records</th><th className="num">Open cases</th><th>Collapse risk</th></tr></thead>
+            <thead><tr><th>Entity</th><th>Status</th><th>Agencies</th><th className="num">Records</th><th className="num">Open cases</th><th>Insolvency risk</th></tr></thead>
             <tbody>
               {data?.entities.map((e) => (
                 <tr key={txt(e.entity_id)} className="clickable" onClick={() => nav(`/entities/${txt(e.entity_id)}`)}>
@@ -342,7 +342,7 @@ export function EntityView() {
                 <div><dt>ABN / GST</dt><dd>{txt(p.abn_status ?? '—')} · GST {txt(p.gst_status ?? '—')}</dd></div>
                 <div><dt>Officers (synthetic)</dt><dd>{data.officers.length} recorded</dd></div>
                 <div><dt>Licences</dt><dd>{((p.licences as Row[]) ?? []).map((l) => `${txt(l.licence_type)} ${txt(l.licence_no)}`).join(', ') || 'None'}</dd></div>
-                <div><dt>Collapse event</dt><dd>{p.collapse_status ? `${STATUS[txt(p.collapse_status)] ?? txt(p.collapse_status)} · ${date(p.collapse_date)}` : 'None recorded'}</dd></div>
+                <div><dt>Insolvency or deregistration</dt><dd>{p.collapse_status ? `${STATUS[txt(p.collapse_status)] ?? txt(p.collapse_status)} · ${date(p.collapse_date)}` : 'None recorded'}</dd></div>
               </dl>
             </div>
           </section>
@@ -406,18 +406,18 @@ export function EntityView() {
         </div>
         <aside className="column">
           <section className="card">
-            <div className="card-head"><h3>{data.risk?.band === 'Collapsed' ? 'Status' : 'Collapse risk'}</h3>{data.risk?.band !== 'Collapsed' && <span className="ai-label">✦ Model · {txt(data.risk?.model_version ?? '').split(';')[0]}</span>}</div>
+            <div className="card-head"><h3>{data.risk?.band === 'Collapsed' ? 'Status' : 'Insolvency risk'}</h3>{data.risk?.band !== 'Collapsed' && <span className="ai-label">✦ Model · {txt(data.risk?.model_version ?? '').split(';')[0]}</span>}</div>
             <div className="card-body">
               {data.risk?.band === 'Collapsed' ? (
                 <>
-                  <div className="risk-number"><strong>Collapsed</strong><span>{collapseKind(data.risk.collapse_status)} · {date(data.risk.collapse_date)}</span></div>
-                  <p className="note">From the ASIC register. A collapsed entity has no forward collapse probability; the trend shows the calibrated risk it carried beforehand.</p>
-                  <Sparkline points={data.risk_history.map((h) => Number(h.p_collapse_12m))} label="Collapse probability at each quarterly snapshot before the collapse" />
+                  <div className="risk-number"><strong style={{ fontSize: 'var(--text-xl)' }}>{collapseKind(data.risk.collapse_status)}</strong><span>Since {date(data.risk.collapse_date)}</span></div>
+                  <p className="note">From the ASIC register. An entity already in external administration or deregistered has no forward insolvency risk; the trend shows the calibrated risk it carried beforehand.</p>
+                  <Sparkline points={data.risk_history.map((h) => Number(h.p_collapse_12m))} label="Insolvency risk at each quarterly snapshot before the event" />
                 </>
               ) : data.risk ? (
                 <>
                   <div className="risk-number"><strong>{pct(data.risk.p_collapse_12m)}</strong><span>{txt(data.risk.band)} · 12 months</span></div>
-                  <Sparkline points={data.risk_history.map((h) => Number(h.p_collapse_12m))} label="Collapse probability at each quarterly snapshot" />
+                  <Sparkline points={data.risk_history.map((h) => Number(h.p_collapse_12m))} label="Insolvency risk at each quarterly snapshot" />
                   <p className="note">24-month probability: {pct(data.risk.p_collapse_24m)} · {data.risk_history.length} quarterly snapshots</p>
                   <div className="drivers" style={{ marginTop: 12 }}>
                     {data.risk.drivers.map((d, i) => (
@@ -480,12 +480,12 @@ const W_LABELS: [string, string][] = [['w_financial', 'Financial return'], ['w_s
 const PARAM_LABEL: Record<string, string> = {
   success_b0: 'P(success) intercept (fitted)', success_b1: 'P(success) slope on evidence strength (fitted)',
   success_default_strength: 'Default evidence strength', success_fit_n: 'Matters used in the P(success) fit',
-  fin_return_cap: 'Return ratio that scores 100', collapse_clamp: 'Upper limit on P(collapse)',
+  fin_return_cap: 'Return ratio that scores 100', collapse_clamp: 'Upper limit on insolvency risk',
   harm_consumers_log_scale: 'Harm: consumers scale (log10)', harm_loss_log_scale: 'Harm: loss scale (log10 $)',
   harm_w_consumers: 'Harm weight: consumers affected', harm_w_loss: 'Harm weight: consumer loss', harm_w_vulnerable: 'Harm weight: vulnerable cohort',
-  urg_w_collapse: 'Urgency weight: collapse risk', urg_w_smr: 'Urgency weight: recent SMR (restricted)', urg_w_limitation: 'Urgency weight: limitation date',
+  urg_w_collapse: 'Urgency weight: insolvency risk', urg_w_smr: 'Urgency weight: recent SMR (restricted)', urg_w_limitation: 'Urgency weight: limitation date',
   limitation_window_months: 'Limitation window (months)', limitation_ramp_months: 'Limitation urgency ramp (months)',
-  default_p_collapse_12m: 'Default P(collapse 12m) when unscored', default_p_collapse_24m: 'Default P(collapse 24m) when unscored',
+  default_p_collapse_12m: 'Default insolvency risk (12m) when unscored', default_p_collapse_24m: 'Default insolvency risk (24m) when unscored',
   band_proceed: 'Band threshold: Proceed', band_conditional: 'Band threshold: Proceed – conditional', band_alternatives: 'Band threshold: Consider alternatives',
 };
 
@@ -602,7 +602,7 @@ export function AdminView() {
             <div className="card-body list">
               {data.presets.map((pr) => (
                 <div className="list-item" key={txt(pr.preset_id)}>
-                  <div><strong>{txt(pr.name)}</strong><small>cost ×{txt(pr.cost_multiplier)} · duration ×{txt(pr.duration_multiplier)}{pr.p_collapse_override !== null ? ` · P(collapse) → ${pct(pr.p_collapse_override)}` : ''}{pr.p_success_override !== null ? ` · P(success) → ${pct(pr.p_success_override)}` : ''} · recoverable ×{txt(pr.recoverable_multiplier)}</small></div>
+                  <div><strong>{txt(pr.name)}</strong><small>cost ×{txt(pr.cost_multiplier)} · duration ×{txt(pr.duration_multiplier)}{pr.p_collapse_override !== null ? ` · insolvency risk → ${pct(pr.p_collapse_override)}` : ''}{pr.p_success_override !== null ? ` · P(success) → ${pct(pr.p_success_override)}` : ''} · recoverable ×{txt(pr.recoverable_multiplier)}</small></div>
                 </div>
               ))}
             </div>
@@ -615,37 +615,39 @@ export function AdminView() {
 
 /* ---------------- Data sources & provenance ---------------- */
 export function SourcesView() {
-  const { data, error, loading, reload } = useApi<{ sources: Row[]; record_counts: Row[] }>('/api/sources');
+  const { data, error, loading, reload } = useApi<{ sources: Row[] }>('/api/sources');
   if (error) return <ErrorState message={error} onRetry={reload} />;
   if (loading && !data) return <PageSkeleton />;
+  const statusClass = (st: unknown) => (st === 'In use' ? 'badge good' : st === 'Review only' ? 'badge warn' : 'badge');
   return (
     <section className="view active">
       <header className="page-head">
         <div>
           <h1>Data sources &amp; provenance</h1>
-          <p>Real public data wherever it exists; synthetic data only where a confidential source would sit in production. Every record carries a provenance badge.</p>
+          <p>
+            Real public data wherever it exists; synthetic data only where a confidential source would sit in production. Each linked record carries the
+            provenance of its own source, so an agency (for example ASIC) can have both public and synthetic records.
+          </p>
         </div>
         <div className="row"><Prov p="public" /><Prov p="synthetic" /><Prov p="derived" /></div>
       </header>
-      <div className="grid-main">
-        <section className="card">
-          <table className="data-table">
-            <thead><tr><th>Source</th><th>Publisher</th><th>Feeds</th><th>Licence</th><th>Provenance</th></tr></thead>
-            <tbody>
-              {data?.sources.map((s) => (
-                <tr key={txt(s.id)}><td><strong>{txt(s.name)}</strong><small className="note">{txt(s.id)}</small></td><td>{txt(s.publisher)}</td><td>{txt(s.feeds)}</td><td className="small">{txt(s.licence)}</td><td><Prov p={s.provenance} /></td></tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-        <aside className="card">
-          <div className="card-head"><h3>Linked source records</h3></div>
-          <table className="data-table">
-            <thead><tr><th>Agency</th><th>Provenance</th><th className="num">Records</th></tr></thead>
-            <tbody>{data?.record_counts.map((r, i) => <tr key={i}><td>{txt(r.agency)}</td><td><Prov p={r.provenance} /></td><td className="num">{num(r.records)}</td></tr>)}</tbody>
-          </table>
-        </aside>
-      </div>
+      <section className="card">
+        <table className="data-table">
+          <thead><tr><th>Source</th><th>Publisher</th><th>Feeds</th><th>Licence</th><th>Provenance</th><th>Use in the app</th></tr></thead>
+          <tbody>
+            {data?.sources.map((s) => (
+              <tr key={txt(s.id)}>
+                <td><strong>{txt(s.name)}</strong><small className="note" style={{ display: 'block' }}>{txt(s.id)}</small></td>
+                <td>{txt(s.publisher)}</td>
+                <td className="small">{txt(s.feeds)}</td>
+                <td className="small">{txt(s.licence)}</td>
+                <td><Prov p={s.provenance} /></td>
+                <td><span className={statusClass(s.status)}>{txt(s.status)}</span><small className="note" style={{ display: 'block' }}>{txt(s.detail)}</small></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
     </section>
   );
 }

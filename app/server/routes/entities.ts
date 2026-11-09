@@ -213,8 +213,8 @@ export function registerEntityRoutes(kit: Kit) {
         `Alleged loss $${txt(item.alleged_loss_aud)}; consumers affected ${txt(item.consumers_affected)}.`,
         `Entity: ${txt(p.name ?? item.acn)}, status ${txt(p.status)}, ${txt(p.open_cases ?? 0)} open cases (${snap.cases.map((c) => `${txt(c.case_id)} ${txt(c.title)}`).join('; ') || 'none'}).`,
         snap.risk?.band === 'Collapsed'
-          ? `Entity has already collapsed (${snap.risk.collapse_status === 'EXAD' ? 'external administration' : 'deregistered'} on ${txt(snap.risk.collapse_date).slice(0, 10)}).`
-          : `Collapse risk 12m (calibrated): ${snap.risk ? `${Math.round(Number(snap.risk.p_collapse_12m) * 100)}% ${txt(snap.risk.band)}` : 'not scored'}.`,
+          ? `Entity is already ${snap.risk.collapse_status === 'EXAD' ? 'in external administration' : 'deregistered'} (since ${txt(snap.risk.collapse_date).slice(0, 10)}).`
+          : `Insolvency risk 12m (calibrated): ${snap.risk ? `${Math.round(Number(snap.risk.p_collapse_12m) * 100)}% ${txt(snap.risk.band)}` : 'not scored'}.`,
         `ATO debt $${txt(p.ato_debt_aud ?? 'n/a')}; APRA flags ${txt(p.apra_flag_count ?? 0)}; AFCA complaints ${txt(p.afca_complaints_latest ?? 0)}; possible banned-director matches ${txt(p.directors_possible_banned_match ?? 0)} (unconfirmed).`,
       ].join('\n');
       const reply = await chat([

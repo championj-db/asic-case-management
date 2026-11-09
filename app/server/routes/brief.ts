@@ -89,10 +89,10 @@ async function buildContext(kit: Kit, req: Request, actor: Actor, caseId: string
   if (austrac) lines.push(`- AUSTRAC (restricted; reader is authorised): ${fmt(austrac.smr_count_24m)} SMRs in 24 months, ${fmt(austrac.large_flow_count)} large-flow ${sr('AUSTRAC')}`);
   else lines.push(`- AUSTRAC: ${fmt(p.austrac_restricted_record_count)} restricted records exist; detail withheld (reader not authorised). Do not speculate about their content.`);
   if (r && r.band === 'Collapsed') {
-    lines.push(`- Respondent has already collapsed: ${r.collapse_status === 'EXAD' ? 'entered external administration' : 'deregistered'} on ${txt(r.collapse_date).slice(0, 10)} (ASIC register). No forward collapse probability applies; recovery is treated as if collapse is certain. [PPS]`);
+    lines.push(`- Respondent is already ${r.collapse_status === 'EXAD' ? 'in external administration' : 'deregistered'} since ${txt(r.collapse_date).slice(0, 10)} (ASIC register). No forward insolvency risk applies; recovery is treated as if insolvency is certain. [PPS]`);
   } else if (r) {
     const drivers = redactDrivers(r.drivers_json, authorised).map((d) => `${d.sentence} (${d.direction} risk)`).join('; ');
-    lines.push(`- Collapse model ${txt(r.model_version)}: P(collapse 12m) ${Math.round(Number(r.p_collapse_12m) * 100)}%, 24m ${Math.round(Number(r.p_collapse_24m) * 100)}%, band ${txt(r.band)}. Top drivers: ${txt(drivers)} [PPS]`);
+    lines.push(`- Insolvency model ${txt(r.model_version)}: probability of entering external administration or being deregistered within 12 months ${Math.round(Number(r.p_collapse_12m) * 100)}%, within 24 months ${Math.round(Number(r.p_collapse_24m) * 100)}%, band ${txt(r.band)}. Top drivers: ${txt(drivers)} [PPS]`);
   }
   const ps = pps.rows[0];
   if (ps) lines.push(`\nPPS ${txt(ps.total)} (${txt(ps.band)}), params ${txt(ps.params_version)}, weights ${txt(ps.weights_version)}. Criteria: ${txt(ps.criteria_json)} [PPS]`);
@@ -112,6 +112,7 @@ Rules:
 - EVERY sentence that states a fact must end with one or more citation tokens copied exactly from the context, e.g. [EV:EV-00012] [EVT:ab12] [SR:CO-123:ATO] [PPS] [SCN:1a2b3c4d] [HM:HM-00012].
 - Write exactly these sections, each starting with a level-2 markdown heading: ${BRIEF_SECTIONS.map((s) => `"## ${s}"`).join(', ')}.
 - In "Recommendation" state one of: Proceed, Proceed – conditional, Consider alternatives, Do not pursue — and say the score is a decision aid; the decision rests with the delegate.
+- Use the terms "insolvency risk", "external administration" and "deregistered"; never say "collapse".
 - Flag synthetic or unconfirmed data (e.g. possible banned-register matches) as such. Do not speculate about restricted AUSTRAC content.
 - Keep each section to 2-6 sentences or a short bullet list.
 - Output only the sections: no title, preamble, classification line, horizontal rules or other headings.`;

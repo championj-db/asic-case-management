@@ -155,7 +155,7 @@ export function sensitivity(i: PpsInputs, w: PpsWeights, p: PpsParams, pct = 0.2
   ];
   const rows: [string, string, (x: PpsInputs, m: number) => PpsInputs][] = [
     ['litigation_cost', 'Litigation cost', (x, m) => ({ ...x, litigation_cost: x.litigation_cost * m })],
-    ['p_collapse', 'Collapse probability', (x, m) => withCollapse24(x, clamp(x.p_collapse_24m * m, 0, 1))],
+    ['p_collapse', 'Insolvency risk', (x, m) => withCollapse24(x, clamp(x.p_collapse_24m * m, 0, 1))],
     ['p_success', 'P(success)', (x, m) => ({ ...x, p_success: clamp(x.p_success * m, 0, 1) })],
     ['recoverable', 'Recoverable amount', (x, m) => ({ ...x, recoverable: x.recoverable * m })],
     ['duration_months', 'Case duration', (x, m) => ({ ...x, duration_months: x.duration_months * m })],

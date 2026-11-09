@@ -79,7 +79,7 @@ export function CaseWorkspace() {
             </p>
             <div className="badges" style={{ marginTop: 12 }}>
               <span className="badge">PPS <strong>{c.pps === null || c.pps === undefined ? '—' : Math.round(Number(c.pps))}</strong></span>
-              <span className="badge">{c.risk_band === 'Collapsed' ? 'Respondent' : 'Collapse risk'} <strong>{riskLabel(c.p_collapse_12m, c.risk_band, c.risk_collapse_date, c.risk_collapse_status)}</strong></span>
+              <span className="badge">{c.risk_band === 'Collapsed' ? 'Respondent' : 'Insolvency risk'} <strong>{riskLabel(c.p_collapse_12m, c.risk_band, c.risk_collapse_date, c.risk_collapse_status)}</strong></span>
               <span className="badge">Next key date <strong>{data.next_key_date ? `${date(data.next_key_date.due_date)} · ${txt(data.next_key_date.title)}` : '—'}</strong></span>
               {data.latest_decision && <span className="badge">Decision <strong>{txt(data.latest_decision.decision)} · {txt(data.latest_decision.approval_status)}</strong></span>}
             </div>
@@ -198,7 +198,7 @@ function OverviewTab({ data, onChange }: { data: CaseDetail; onChange: () => voi
           <section className="card">
             <div className="card-head"><h3>Parties</h3><button className="btn sm" onClick={() => nav(`/cases/${txt(c.case_id)}/network`)}>Open network</button></div>
             <table className="data-table">
-              <thead><tr><th>Entity</th><th>Role</th><th>Collapse risk</th></tr></thead>
+              <thead><tr><th>Entity</th><th>Role</th><th>Insolvency risk</th></tr></thead>
               <tbody>
                 {[...respondents, ...others].slice(0, 14).map((p) => (
                   <tr key={txt(p.entity_id)} className="clickable" onClick={() => nav(`/entities/${txt(p.entity_id)}`)}>

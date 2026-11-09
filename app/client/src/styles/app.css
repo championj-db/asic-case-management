@@ -168,3 +168,5 @@ mark.focus { outline: 2px solid var(--accent); }
 .matrix::after { bottom: -52px; }
 .badge.good { border-color: var(--success); color: var(--success); }
 .badge.warn { border-color: var(--warn); }
+/* Legal terminology: the matrix y-axis is insolvency risk (external administration or deregistration) */
+.matrix::before { content: "Insolvency risk ↑"; }
