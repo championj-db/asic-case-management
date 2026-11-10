@@ -13,36 +13,43 @@ interface Section {
 
 const INLINE = /\[(EV|EVT|SR|PPS|SCN|HM)(?::([^\]]+))?\]|\*\*(.+?)\*\*|\*(?!\s)(.+?)\*/g;
 
-/** Inline markdown (bold, italic) plus citation chips; flags factual sentences that carry no citation (SPEC 8.6). */
-function Sentences({ text, onCite }: { text: string; onCite: (kind: string, ref: string) => void }) {
-  const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z(])/);
+const CITE = /\[(EV|EVT|SR|PPS|SCN|HM)(?::([^\]]+))?\]/;
+type OnCite = (kind: string, ref: string) => void;
+
+/** Inline markdown (bold, italic, nested) with citation chips. */
+function Inline({ text, onCite, k = '' }: { text: string; onCite: OnCite; k?: string }) {
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(INLINE)) {
+    nodes.push(text.slice(last, m.index));
+    const key = `${k}-${m.index}`;
+    if (m[1]) {
+      const kind = m[1];
+      const ref = m[2] ?? '';
+      nodes.push(
+        <button key={key} className="citation" onClick={() => onCite(kind, ref)} title={`${kind}${ref ? ` ${ref}` : ''}`}>
+          {kind === 'PPS' ? 'PPS' : kind === 'SR' ? ref.split(':').pop() : `${kind}-${ref.replace(/^EV-/, '').slice(0, 10)}`}
+        </button>,
+      );
+    } else if (m[3]) nodes.push(<strong key={key}><Inline text={m[3]} onCite={onCite} k={key} /></strong>);
+    else if (m[4]) nodes.push(<em key={key}><Inline text={m[4]} onCite={onCite} k={key} /></em>);
+    last = (m.index ?? 0) + m[0].length;
+  }
+  nodes.push(text.slice(last));
+  return <>{nodes}</>;
+}
+
+/** Splits into sentences and flags factual sentences that carry no citation (SPEC 8.6). */
+function Sentences({ text, onCite }: { text: string; onCite: OnCite }) {
+  const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z(*])/);
   return (
     <>
       {sentences.map((s, si) => {
-        const nodes: ReactNode[] = [];
-        let last = 0;
-        let cited = false;
-        for (const m of s.matchAll(INLINE)) {
-          nodes.push(s.slice(last, m.index));
-          if (m[1]) {
-            cited = true;
-            const kind = m[1];
-            const ref = m[2] ?? '';
-            nodes.push(
-              <button key={`${si}-${m.index}`} className="citation" onClick={() => onCite(kind, ref)} title={`${kind}${ref ? ` ${ref}` : ''}`}>
-                {kind === 'PPS' ? 'PPS' : kind === 'SR' ? ref.split(':').pop() : `${kind}-${ref.replace(/^EV-/, '').slice(0, 10)}`}
-              </button>,
-            );
-          } else if (m[3]) nodes.push(<strong key={`${si}-${m.index}`}>{m[3]}</strong>);
-          else if (m[4]) nodes.push(<em key={`${si}-${m.index}`}>{m[4]}</em>);
-          last = (m.index ?? 0) + m[0].length;
-        }
-        nodes.push(s.slice(last));
-        const plain = s.replace(INLINE, '').trim();
-        const needsCite = !cited && plain.length > 40 && !/^(Recommendation|Note|Proceed|Consider|Do not pursue)\b/.test(plain);
+        const plain = s.replace(new RegExp(CITE.source, 'g'), '').replace(/\*/g, '').trim();
+        const needsCite = !CITE.test(s) && plain.length > 40 && !/^(Recommendation|Note|Proceed|Consider|Do not pursue)\b/.test(plain);
         return (
           <span key={si} className={needsCite ? 'uncited' : undefined} title={needsCite ? 'No citation — verify or add a source before review' : undefined}>
-            {nodes}{' '}
+            <Inline text={s} onCite={onCite} k={String(si)} />{' '}
           </span>
         );
       })}
@@ -50,9 +57,19 @@ function Sentences({ text, onCite }: { text: string; onCite: (kind: string, ref:
   );
 }
 
-type Block = { kind: 'p' | 'h' | 'ul' | 'ol'; lines: string[] };
+type Block = { kind: 'p' | 'h' | 'ul' | 'ol' | 'table'; lines: string[] };
 
-/** Block markdown the model is allowed to use: paragraphs, sub-headings, bullet and numbered lists. Rules (---) are dropped. */
+const cells = (row: string) => row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+const isRule = (row: string) => cells(row).every((c) => /^:?-{2,}:?$/.test(c));
+
+/** Table rows from a markdown table block: header (when a |---| rule follows the first row) and body rows. */
+function tableRows(lines: string[]) {
+  const hasHead = lines.length > 1 && isRule(lines[1]);
+  const rows = lines.filter((l) => !isRule(l)).map(cells);
+  return { head: hasHead ? rows[0] : null, body: hasHead ? rows.slice(1) : rows };
+}
+
+/** Block markdown the model uses: paragraphs, sub-headings, bullet and numbered lists, tables. Rules (---) are dropped. */
 function toBlocks(text: string): Block[] {
   const blocks: Block[] = [];
   for (const raw of text.split('\n')) {
@@ -60,6 +77,11 @@ function toBlocks(text: string): Block[] {
     const prev = blocks[blocks.length - 1];
     if (!line || /^[-*_]{3,}$/.test(line)) {
       if (prev && prev.kind === 'p') blocks.push({ kind: 'p', lines: [] });
+      continue;
+    }
+    if (line.startsWith('|')) {
+      if (prev?.kind === 'table') prev.lines.push(line);
+      else blocks.push({ kind: 'table', lines: [line] });
       continue;
     }
     const h = line.match(/^#{1,6}\s+(.*)$/);
@@ -79,11 +101,22 @@ function toBlocks(text: string): Block[] {
   return blocks.filter((b) => b.lines.length);
 }
 
-function CitedText({ text, onCite }: { text: string; onCite: (kind: string, ref: string) => void }) {
+function CitedText({ text, onCite }: { text: string; onCite: OnCite }) {
   return (
     <div className="brief-body">
       {toBlocks(text).map((b, i) => {
-        if (b.kind === 'h') return <h4 key={i}><Sentences text={b.lines[0]} onCite={onCite} /></h4>;
+        if (b.kind === 'h') return <h4 key={i}><Inline text={b.lines[0]} onCite={onCite} /></h4>;
+        if (b.kind === 'table') {
+          const t = tableRows(b.lines);
+          return (
+            <div key={i} className="brief-table">
+              <table>
+                {t.head && <thead><tr>{t.head.map((c, j) => <th key={j}><Inline text={c} onCite={onCite} /></th>)}</tr></thead>}
+                <tbody>{t.body.map((r, j) => <tr key={j}>{r.map((c, x) => <td key={x}><Inline text={c} onCite={onCite} /></td>)}</tr>)}</tbody>
+              </table>
+            </div>
+          );
+        }
         if (b.kind === 'ul' || b.kind === 'ol') {
           const items = b.lines.map((l, j) => <li key={j}><Sentences text={l} onCite={onCite} /></li>);
           return b.kind === 'ul' ? <ul key={i}>{items}</ul> : <ol key={i}>{items}</ol>;
@@ -94,6 +127,62 @@ function CitedText({ text, onCite }: { text: string; onCite: (kind: string, ref:
   );
 }
 
+const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** Inline markdown to HTML for export: bold, italic and citation tokens as compact bracketed references. */
+function inlineHtml(text: string): string {
+  let out = '';
+  let last = 0;
+  for (const m of text.matchAll(INLINE)) {
+    out += esc(text.slice(last, m.index));
+    if (m[1]) {
+      const ref = m[2] ?? '';
+      const label = m[1] === 'PPS' ? 'PPS' : m[1] === 'SR' ? `SR ${ref.split(':').pop()}` : `${m[1]}-${ref.replace(/^EV-/, '')}`;
+      out += `<span class="cite">[${esc(label)}]</span>`;
+    } else if (m[3]) out += `<strong>${inlineHtml(m[3])}</strong>`;
+    else if (m[4]) out += `<em>${inlineHtml(m[4])}</em>`;
+    last = (m.index ?? 0) + m[0].length;
+  }
+  return out + esc(text.slice(last));
+}
+
+/** Same block grammar as the on-screen view, rendered to HTML for the print/PDF and Word exports. */
+export function sectionHtml(text: string): string {
+  return toBlocks(text)
+    .map((b) => {
+      if (b.kind === 'h') return `<h3>${inlineHtml(b.lines[0])}</h3>`;
+      if (b.kind === 'table') {
+        const t = tableRows(b.lines);
+        const head = t.head ? `<thead><tr>${t.head.map((c) => `<th>${inlineHtml(c)}</th>`).join('')}</tr></thead>` : '';
+        return `<table>${head}<tbody>${t.body.map((r) => `<tr>${r.map((c) => `<td>${inlineHtml(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+      }
+      if (b.kind === 'ul' || b.kind === 'ol') return `<${b.kind}>${b.lines.map((l) => `<li>${inlineHtml(l)}</li>`).join('')}</${b.kind}>`;
+      return `<p>${inlineHtml(b.lines.join(' '))}</p>`;
+    })
+    .join('');
+}
+
+const EXPORT_CSS = `
+@page { size: A4; margin: 20mm 18mm 22mm; }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.5; color: #111; max-width: 760px; margin: 32px auto; padding: 0 16px; }
+.classification { text-align: center; font-weight: bold; letter-spacing: .04em; color: #8a1c1c; border: 1px solid #8a1c1c; padding: 4px; margin: 0 0 24px; font-size: 10pt; }
+h1 { font-size: 18pt; margin: 0 0 4px; }
+.meta { color: #555; font-size: 9.5pt; margin: 0 0 20px; }
+h2 { font-size: 13pt; border-bottom: 1px solid #bbb; padding-bottom: 3px; margin: 22px 0 6px; break-after: avoid; page-break-after: avoid; }
+h3 { font-size: 11pt; margin: 12px 0 4px; break-after: avoid; }
+.status { display: inline-block; font-size: 8.5pt; color: #555; border: 1px solid #bbb; border-radius: 3px; padding: 0 5px; margin-bottom: 6px; }
+p { margin: 0 0 8px; }
+ul, ol { margin: 0 0 8px 20px; padding: 0; }
+li { margin: 0 0 3px; }
+li, p { orphans: 3; widows: 3; }
+table { border-collapse: collapse; width: 100%; margin: 4px 0 10px; font-size: 9.5pt; break-inside: avoid; }
+th, td { border: 1px solid #bbb; padding: 4px 6px; text-align: left; vertical-align: top; }
+th { background: #f0f0f0; font-weight: bold; }
+.cite { font-size: 8pt; color: #555; white-space: nowrap; }
+.footer { margin-top: 28px; border-top: 1px solid #bbb; padding-top: 6px; font-size: 8.5pt; color: #555; }
+@media print { body { margin: 0; max-width: none; padding: 0; } .classification { margin-bottom: 16px; } }
+`;
+
 /** Older drafts may carry a title block as extra "sections"; show only the template sections when they are present. */
 function templateOnly(sections: Section[], template?: string[]): Section[] {
   if (!template?.length) return sections;
@@ -101,7 +190,7 @@ function templateOnly(sections: Section[], template?: string[]): Section[] {
   return keep.length >= Math.ceil(template.length / 2) ? keep : sections;
 }
 
-export function BriefTab({ caseId }: { caseId: string }) {
+export function BriefTab({ caseId, caseNumber, caseTitle }: { caseId: string; caseNumber?: string; caseTitle?: string }) {
   const { me } = useSession();
   const toast = useToast();
   const nav = useNavigate();
@@ -167,14 +256,39 @@ export function BriefTab({ caseId }: { caseId: string }) {
   };
   const exportDoc = async (format: 'html' | 'doc') => {
     if (!sections) return;
-    const body = sections
-      .map((s) => `<h2>${s.title}</h2><p><em>${s.status}</em></p>${s.body.split(/\n{2,}/).map((p) => `<p>${p.replace(/</g, '&lt;')}</p>`).join('')}`)
-      .join('');
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Case brief ${caseId}</title><style>body{font-family:Arial,sans-serif;max-width:760px;margin:40px auto;line-height:1.5}h2{border-bottom:1px solid #ccc}</style></head><body><p>OFFICIAL: Sensitive</p><h1>Prosecution recommendation — ${caseId}</h1><p>Version ${txt(version?.version ?? 'draft')} · exported ${new Date().toLocaleString('en-AU')} by ${me?.displayName}. AI-drafted sections are marked “Draft (AI)”.</p>${body}</body></html>`;
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([html], { type: format === 'doc' ? 'application/msword' : 'text/html' }));
-    a.download = `${caseId}-brief-v${txt(version?.version ?? 'draft')}.${format}`;
-    a.click();
+    const ref = caseNumber || caseId;
+    const ver = txt(version?.version ?? 'draft');
+    const body = sections.map((s) => `<h2>${esc(s.title)}</h2><span class="status">${esc(s.status)}</span>${sectionHtml(s.body)}`).join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(ref)} prosecution recommendation v${ver}</title><style>${EXPORT_CSS}</style></head><body>
+<div class="classification">OFFICIAL: Sensitive</div>
+<h1>Prosecution recommendation — ${esc(ref)}</h1>
+${caseTitle ? `<p class="meta"><strong>${esc(caseTitle)}</strong></p>` : ''}
+<p class="meta">Brief version ${ver} · exported ${esc(new Date().toLocaleString('en-AU'))} by ${esc(me?.displayName ?? '')}. Sections marked “Draft (AI)” were drafted by AI and have not been reviewed. Citations in [brackets] refer to evidence (EV), timeline events (EVT), agency source records (SR), the Prosecution Priority Score (PPS), scenarios (SCN) and past matters (HM) in the case file.</p>
+${body}
+<div class="footer">The Prosecution Priority Score is a decision aid; the decision rests with the delegate. OFFICIAL: Sensitive</div>
+</body></html>`;
+    if (format === 'html') {
+      // Open a print-ready page and the print dialog (Save as PDF); fall back to a download if pop-ups are blocked
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.open();
+        w.document.write(html);
+        w.document.close();
+        w.focus();
+        setTimeout(() => w.print(), 300);
+      } else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+        a.download = `${ref}-brief-v${ver}.html`;
+        a.click();
+        toast('Pop-up blocked — downloaded the printable brief instead');
+      }
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob(['\ufeff', html], { type: 'application/msword' }));
+      a.download = `${ref}-brief-v${ver}.doc`;
+      a.click();
+    }
     await api.post(`/api/cases/${caseId}/brief/export`, { version: version?.version, format }).catch(() => undefined);
   };
 

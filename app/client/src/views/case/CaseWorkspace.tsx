@@ -115,7 +115,7 @@ export function CaseWorkspace() {
       {tab === 'timeline' && <TimelineTab caseId={id} />}
       {tab === 'network' && <NetworkTab caseId={id} />}
       {tab === 'scoring' && <ScoringTab caseId={id} onChange={reload} />}
-      {tab === 'brief' && <BriefTab caseId={id} />}
+      {tab === 'brief' && <BriefTab caseId={id} caseNumber={txt(c.case_number)} caseTitle={txt(c.title)} />}
       {tab === 'tasks' && <TasksTab caseId={id} onChange={reload} />}
       {tab === 'audit' && <AuditTab caseId={id} />}
       {advance && (
