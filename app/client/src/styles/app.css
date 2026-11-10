@@ -170,3 +170,7 @@ mark.focus { outline: 2px solid var(--accent); }
 .badge.warn { border-color: var(--warn); }
 /* Legal terminology: the matrix y-axis is insolvency risk (external administration or deregistration) */
 .matrix::before { content: "Insolvency risk ↑"; }
+.brief-table { overflow-x: auto; margin: 0 0 var(--space-3); }
+.brief-table table { border-collapse: collapse; width: 100%; font-size: var(--text-sm); }
+.brief-table th, .brief-table td { border: 1px solid var(--border); padding: var(--space-1) var(--space-2); text-align: left; vertical-align: top; }
+.brief-table th { background: var(--surface-warm); font-weight: 600; }
